@@ -1,0 +1,144 @@
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: UTFPR-CP
+// Engineer: Vinicius Souza Dias
+//
+// Create Date: 29.09.2026 13:30:30
+// Design Name: Processador RV32I
+// Module Name: execution
+// Project Name: processador_riscV
+// Target Device: Artix-7 Nexys A7-100T
+// Tool Version: Vivado 2025.2
+// Description: Executa operacoes da ALU e calcula enderecos e condicoes de desvio.
+//
+// Dependencies: alu, alu_pkg, branch_pkg
+//
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+//   Os seletores das entradas da ALU devem receber somente os codigos descritos
+//   na interface. O destino calculado para desvio tem o bit menos significativo
+//   zerado para manter o alinhamento de instrucao.
+//////////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * @file execution.sv
+ * @brief Unidade de execucao do processador RV32I.
+ *
+ * Seleciona os operandos da ALU, executa a operacao indicada e calcula em
+ * paralelo o endereco de destino de desvio. Para desvios condicionais, a
+ * decisao usa `zero`, que nesta implementacao reflete o bit menos significativo
+ * do resultado da ALU: OP_BCT aceita quando `zero` vale 1 e OP_BCF aceita
+ * quando `zero` vale 0. OP_BIP e OP_BIR sao desvios incondicionais relativos ao
+ * PC e a rs1, respectivamente.
+ *
+ * @param XLEN Largura dos dados e enderecos. Valor padrao: 32 bits.
+ * @param pc_next_i Endereco sequencial da instrucao, normalmente PC + 4.
+ * @param pc_i Endereco da instrucao atual.
+ * @param imm_i Imediato estendido da instrucao.
+ * @param reg_data1_i Valor lido do registrador rs1.
+ * @param reg_data2_i Valor lido do registrador rs2.
+ * @param alu_control_i Operacao da ALU, conforme `alu_op_t` de `alu_pkg`.
+ * @param branch_control_i Tipo de desvio, conforme `branch_op_t` de `branch_pkg`.
+ * @param branch_enable_i Habilita a decisao de desvio.
+ * @param control_alu_a Seletor da entrada A: 0 = rs1, 1 = PC.
+ * @param control_alu_b Seletor da entrada B: 00 = rs2, 01 = imediato,
+ *                       10 = PC+4.
+ * @retval pc_branch_o Endereco de destino calculado, com o bit 0 zerado.
+ * @retval alu_result_o Resultado da operacao selecionada para a ALU.
+ * @retval branch_taken_o Indica se o desvio deve ser tomado.
+ */
+module execution
+    import alu_pkg::*;
+    import branch_pkg::*;
+#(
+    parameter int XLEN = 32
+)(
+    input  logic [XLEN-1:0] pc_next_i,
+    input  logic [XLEN-1:0] pc_i,
+    input  logic [XLEN-1:0] imm_i,
+    input  logic [XLEN-1:0] reg_data1_i,
+    input  logic [XLEN-1:0] reg_data2_i,
+
+    input  alu_op_t         alu_control_i,
+    input  branch_op_t      branch_control_i,
+    input  logic            branch_enable_i,
+    input  logic            control_alu_a,
+    input  logic [1:0]      control_alu_b,
+
+    output logic [XLEN-1:0] pc_branch_o,
+    output logic [XLEN-1:0] alu_result_o,
+    output logic            branch_taken_o
+);
+
+    logic [XLEN-1:0] alu_a;
+    logic [XLEN-1:0] alu_b;
+    logic [XLEN-1:0] alu_result;
+    logic            zero;
+
+    logic [XLEN-1:0] branch_address;
+    logic            branch_taken;
+    logic [XLEN-1:0] branch_a;
+    logic [XLEN-1:0] branch_b;
+
+    assign alu_result_o  = alu_result;
+    assign pc_branch_o   = branch_address;
+    assign branch_taken_o = branch_taken;
+
+    // Selecao dos operandos enviados a ALU.
+    always_comb begin
+        case (control_alu_a)
+            1'b0: alu_a = reg_data1_i;
+            1'b1: alu_a = pc_i;
+        endcase
+
+        case (control_alu_b)
+            2'b00: alu_b = reg_data2_i;
+            2'b01: alu_b = imm_i;
+            2'b10: alu_b = pc_next_i;
+            default: alu_b = reg_data2_i;
+        endcase
+    end
+
+    alu #(
+        .XLEN(XLEN)
+    ) alu_inst (
+        .a_i     (alu_a),
+        .b_i     (alu_b),
+        .alu_op_i(alu_control_i),
+        .alu_o   (alu_result),
+        .zero_o  (zero)
+    );
+
+    // Escolhe a condicao do desvio e a base do endereco de destino.
+    always_comb begin
+        if (branch_enable_i) begin
+            case (branch_control_i)
+                OP_BCT: begin
+                    branch_taken = zero;
+                    branch_b     = pc_i;
+                end
+                OP_BCF: begin
+                    branch_taken = ~zero;
+                    branch_b     = pc_i;
+                end
+                OP_BIP: begin
+                    branch_taken = 1'b1;
+                    branch_b     = pc_i;
+                end
+                OP_BIR: begin
+                    branch_taken = 1'b1;
+                    branch_b     = reg_data1_i;
+                end
+            endcase
+        end else begin
+            branch_taken = 1'b0;
+            branch_b     = pc_i;
+        end
+    end
+
+    assign branch_a       = imm_i;
+    assign branch_address = (branch_a + branch_b) & ~32'd1;
+
+endmodule

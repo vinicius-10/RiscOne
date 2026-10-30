@@ -1,0 +1,167 @@
+% Trecho para inclusão no relatório do processador RV32I.
+% Requer o pacote booktabs no preâmbulo do documento.
+
+\subsubsection{Unidade de Controle}
+\label{subsub:control_unit}
+
+A unidade de controle (\textit{control unit}) recebe a instrução completa de 32 bits por meio da entrada \texttt{instruction\_i}. A partir dos campos \textit{opcode}, \textit{func3} e \textit{func7}, o bloco identifica a operação e gera os sinais usados pelas etapas de execução, acesso à memória, escrita no banco de registradores e atualização do contador de programa. A unidade é combinacional e não possui entrada de clock.
+
+O formato geral da instrução e os campos consultados pela unidade são apresentados na Tabela~\ref{tab:control-unit-fields}. A interpretação dos demais campos depende do formato da instrução: em instruções do tipo I, S, B, U e J, parte dos bits que ocupa a posição de \textit{func7} em instruções do tipo R pertence ao imediato.
+
+\begin{table}[!htb]
+\centering
+\caption{Campos da instrução consultados pela unidade de controle.}
+\label{tab:control-unit-fields}
+\begin{tabular}{lll}
+\toprule
+\textbf{Campo} & \textbf{Bits} & \textbf{Uso na decodificação} \\
+\midrule
+\texttt{opcode} & \texttt{[6:0]} & Identifica a classe da instrução. \\
+\texttt{func3} & \texttt{[14:12]} & Distingue operações dentro de uma classe. \\
+\texttt{func7} & \texttt{[31:25]} & Distingue ADD/SUB, SRL/SRA e SRLI/SRAI. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As portas da unidade e sua relação com os blocos do processador estão descritas na Tabela~\ref{tab:control-unit-ports}. Os prefixos dos nomes das saídas indicam o módulo que recebe cada sinal. Os sinais de largura e extensão de memória usam os tipos definidos em \texttt{mem\_pkg}; os sinais da ALU e dos desvios usam os tipos definidos em \texttt{alu\_pkg} e \texttt{branch\_pkg}.
+
+\begin{table}[!htb]
+\centering
+\caption{Entradas e saídas da unidade de controle.}
+\label{tab:control-unit-ports}
+\begin{tabular}{p{4.1cm}p{2.1cm}p{8.0cm}}
+\toprule
+\textbf{Sinal} & \textbf{Direção / largura} & \textbf{Descrição} \\
+\midrule
+\texttt{instruction\_i} & Entrada, 32 bits & Instrução completa a ser decodificada. \\
+\texttt{execution\_alu\_control\_o} & Saída, \texttt{alu\_op\_t} & Seleciona a operação da ALU. \\
+\texttt{execution\_branch\_control\_o} & Saída, \texttt{branch\_op\_t} & Seleciona a condição ou a origem do desvio. \\
+\texttt{execution\_branch\_enable\_o} & Saída, 1 bit & Habilita a avaliação de desvio em \texttt{execution}. \\
+\texttt{execution\_control\_alu\_a\_o} & Saída, 1 bit & Seleciona rs1 (0) ou PC (1) para a entrada A da ALU. \\
+\texttt{execution\_control\_alu\_b\_o} & Saída, 2 bits & Seleciona rs2 (\texttt{00}), imediato (\texttt{01}) ou PC+4 (\texttt{10}) para a entrada B da ALU. \\
+\texttt{search\_pc\_write\_o} & Saída, 1 bit & Habilita a atualização do PC; nesta implementação permanece em 1. \\
+\texttt{data\_memory\_mem\_write\_o} & Saída, 1 bit & Habilita a escrita na memória de dados. \\
+\texttt{data\_memory\_mem\_width\_o} & Saída, \texttt{mem\_width\_t} & Define acesso a byte, meia palavra ou palavra. \\
+\texttt{data\_memory\_mem\_signed\_o} & Saída, \texttt{mem\_signed\_t} & Define extensão com ou sem sinal durante loads. \\
+\texttt{register\_file\_written\_enable\_o} & Saída, 1 bit & Habilita a escrita do resultado no registrador destino. \\
+\texttt{write\_back\_mem\_to\_reg\_o} & Saída, 1 bit & Seleciona dado da memória (1) ou resultado da ALU (0) no write-back. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Por padrão, a unidade seleciona \texttt{OP\_ADD}, mantém os desvios desabilitados, não escreve na memória nem no banco de registradores e seleciona o resultado da ALU para write-back. O seletor de largura de memória assume \texttt{MEM\_WIDTH\_WORD}, e o seletor de extensão assume \texttt{MEM\_UNSIGNED}. O sinal \texttt{search\_pc\_write\_o} permanece ativo. Esses valores também são mantidos para opcodes não suportados.
+
+Nas tabelas de decodificação, os campos \textit{opcode}, \textit{func3} e \textit{func7} mostram a codificação da instrução RV32I. Um traço (--) indica que o campo não é aplicável àquele formato ou não participa da seleção descrita. Salvo quando indicado, as saídas não mencionadas em cada classe mantêm os valores padrão apresentados acima.
+
+\paragraph{Operações da ALU.}
+A Tabela~\ref{tab:control-unit-alu-decode} resume as instruções aritméticas, lógicas e de deslocamento. Em todas elas, a escrita no registrador destino é habilitada. Para instruções do tipo R, a entrada A recebe rs1 e a entrada B recebe rs2. Para instruções do tipo I, A recebe rs1 e B recebe o imediato. O campo \textit{func7} só diferencia as operações indicadas na tabela; para as demais operações, a implementação não usa esse campo na seleção da ALU.
+
+\begin{table}[!htb]
+\centering
+\caption{Decodificação das instruções que utilizam a ALU.}
+\label{tab:control-unit-alu-decode}
+\begin{tabular}{lllll}
+\toprule
+\textbf{Instrução} & \textbf{opcode} & \textbf{func3} & \textbf{func7} & \textbf{Operação da ALU} \\
+\midrule
+ADD   & \texttt{0110011} & \texttt{000} & \texttt{0000000} & \texttt{OP\_ADD} \\
+SUB   & \texttt{0110011} & \texttt{000} & \texttt{0100000} & \texttt{OP\_SUB} \\
+SLL   & \texttt{0110011} & \texttt{001} & \texttt{0000000} & \texttt{OP\_SLL} \\
+SLT   & \texttt{0110011} & \texttt{010} & \texttt{0000000} & \texttt{OP\_SLT} \\
+SLTU  & \texttt{0110011} & \texttt{011} & \texttt{0000000} & \texttt{OP\_SLTU} \\
+XOR   & \texttt{0110011} & \texttt{100} & \texttt{0000000} & \texttt{OP\_XOR} \\
+SRL   & \texttt{0110011} & \texttt{101} & \texttt{0000000} & \texttt{OP\_SRL} \\
+SRA   & \texttt{0110011} & \texttt{101} & \texttt{0100000} & \texttt{OP\_SRA} \\
+OR    & \texttt{0110011} & \texttt{110} & \texttt{0000000} & \texttt{OP\_OR} \\
+AND   & \texttt{0110011} & \texttt{111} & \texttt{0000000} & \texttt{OP\_AND} \\
+\addlinespace
+ADDI  & \texttt{0010011} & \texttt{000} & -- & \texttt{OP\_ADD} \\
+SLTI  & \texttt{0010011} & \texttt{010} & -- & \texttt{OP\_SLT} \\
+SLTIU & \texttt{0010011} & \texttt{011} & -- & \texttt{OP\_SLTU} \\
+XORI  & \texttt{0010011} & \texttt{100} & -- & \texttt{OP\_XOR} \\
+ORI   & \texttt{0010011} & \texttt{110} & -- & \texttt{OP\_OR} \\
+ANDI  & \texttt{0010011} & \texttt{111} & -- & \texttt{OP\_AND} \\
+SLLI  & \texttt{0010011} & \texttt{001} & \texttt{0000000} & \texttt{OP\_SLL} \\
+SRLI  & \texttt{0010011} & \texttt{101} & \texttt{0000000} & \texttt{OP\_SRL} \\
+SRAI  & \texttt{0010011} & \texttt{101} & \texttt{0100000} & \texttt{OP\_SRA} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Nas linhas em que \textit{func7} aparece como --, esse campo não é verificado pela unidade para selecionar a operação. Em SLLI e nos deslocamentos à direita imediatos, os bits superiores do imediato ocupam a posição correspondente a \textit{func7}; a unidade compara esses bits com os padrões de deslocamento definidos em \texttt{func7\_pkg}.
+
+\paragraph{Acessos à memória.}
+Para loads e stores, a ALU soma rs1 ao imediato, com \texttt{execution\_control\_alu\_b\_o = 01}. A Tabela~\ref{tab:control-unit-memory-decode} apresenta os campos e sinais específicos de cada operação.
+
+\begin{table}[!htb]
+\centering
+\small
+\caption{Decodificação das instruções de acesso à memória.}
+\label{tab:control-unit-memory-decode}
+\begin{tabular}{llllllll}
+\toprule
+\textbf{Instrução} & \textbf{opcode} & \textbf{func3} & \textbf{func7} & \textbf{ALU} & \textbf{Largura} & \textbf{Sinal} & \textbf{Controles ativos} \\
+\midrule
+LB  & \texttt{0000011} & \texttt{000} & -- & \texttt{OP\_ADD} & Byte & Com sinal & RegWrite, MemToReg \\
+LH  & \texttt{0000011} & \texttt{001} & -- & \texttt{OP\_ADD} & Half & Com sinal & RegWrite, MemToReg \\
+LW  & \texttt{0000011} & \texttt{010} & -- & \texttt{OP\_ADD} & Word & Com sinal & RegWrite, MemToReg \\
+LBU & \texttt{0000011} & \texttt{100} & -- & \texttt{OP\_ADD} & Byte & Sem sinal & RegWrite, MemToReg \\
+LHU & \texttt{0000011} & \texttt{101} & -- & \texttt{OP\_ADD} & Half & Sem sinal & RegWrite, MemToReg \\
+\addlinespace
+SB  & \texttt{0100011} & \texttt{000} & -- & \texttt{OP\_ADD} & Byte & -- & MemWrite \\
+SH  & \texttt{0100011} & \texttt{001} & -- & \texttt{OP\_ADD} & Half & -- & MemWrite \\
+SW  & \texttt{0100011} & \texttt{010} & -- & \texttt{OP\_ADD} & Word & -- & MemWrite \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Nas linhas de load, \texttt{RegWrite} corresponde a \texttt{register\_file\_written\_enable\_o} e \texttt{MemToReg} a \texttt{write\_back\_mem\_to\_reg\_o}. Para stores, \texttt{MemWrite} corresponde a \texttt{data\_memory\_mem\_write\_o}; a escrita no banco de registradores permanece desabilitada. O campo \textit{func7} não é usado para decodificar loads ou stores.
+
+\paragraph{Desvios condicionais.}
+Todos os desvios usam rs1 e rs2 nas entradas da ALU e mantêm a escrita em registrador e memória desabilitada. A Tabela~\ref{tab:control-unit-branch-decode} apresenta a seleção da comparação e da condição de desvio.
+
+\begin{table}[!htb]
+\centering
+\caption{Decodificação dos desvios condicionais.}
+\label{tab:control-unit-branch-decode}
+\begin{tabular}{llllll}
+\toprule
+\textbf{Instrução} & \textbf{opcode} & \textbf{func3} & \textbf{func7} & \textbf{ALU} & \textbf{branch control} \\
+\midrule
+BEQ  & \texttt{1100011} & \texttt{000} & -- & \texttt{OP\_CMP}  & \texttt{OP\_BCT} \\
+BNE  & \texttt{1100011} & \texttt{001} & -- & \texttt{OP\_CMP}  & \texttt{OP\_BCF} \\
+BLT  & \texttt{1100011} & \texttt{100} & -- & \texttt{OP\_SLT}  & \texttt{OP\_BCT} \\
+BGE  & \texttt{1100011} & \texttt{101} & -- & \texttt{OP\_SLT}  & \texttt{OP\_BCF} \\
+BLTU & \texttt{1100011} & \texttt{110} & -- & \texttt{OP\_SLTU} & \texttt{OP\_BCT} \\
+BGEU & \texttt{1100011} & \texttt{111} & -- & \texttt{OP\_SLTU} & \texttt{OP\_BCF} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Para as seis instruções, \texttt{execution\_branch\_enable\_o = 1}. A implementação da etapa de execução interpreta \texttt{OP\_BCT} como aceitar quando o bit de condição da ALU é 1 e \texttt{OP\_BCF} como aceitar quando esse bit é 0. No projeto, a saída chamada \texttt{zero\_o} da ALU acompanha o bit menos significativo do resultado; assim, \texttt{OP\_CMP} fornece o resultado da comparação de igualdade e \texttt{OP\_SLT}/\texttt{OP\_SLTU} fornecem os resultados das comparações relacionais.
+
+\paragraph{Saltos e instruções de imediato superior.}
+A Tabela~\ref{tab:control-unit-jump-upper-decode} reúne as instruções que selecionam o PC ou o imediato superior. Para JAL e JALR, o resultado de write-back é PC+4, enquanto o destino do salto é calculado na etapa de execução.
+
+\begin{table}[!htb]
+\centering
+\small
+\caption{Decodificação de saltos e instruções do tipo U.}
+\label{tab:control-unit-jump-upper-decode}
+\begin{tabular}{llllllll}
+\toprule
+\textbf{Instrução} & \textbf{opcode} & \textbf{func3} & \textbf{func7} & \textbf{ALU} & \textbf{A / B} & \textbf{Desvio} & \textbf{RegWrite} \\
+\midrule
+LUI   & \texttt{0110111} & -- & -- & \texttt{OP\_PASS\_B} & -- / imediato & Desabilitado & 1 \\
+AUIPC & \texttt{0010111} & -- & -- & \texttt{OP\_ADD}    & PC / imediato & Desabilitado & 1 \\
+JAL   & \texttt{1101111} & -- & -- & \texttt{OP\_PASS\_B} & -- / PC+4 & \texttt{OP\_BIP} (1) & 1 \\
+JALR  & \texttt{1100111} & \texttt{000} & -- & \texttt{OP\_PASS\_B} & -- / PC+4 & \texttt{OP\_BIR} (1) & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Em LUI, o operando B é o imediato U e a ALU o encaminha diretamente à saída. Em AUIPC, a ALU soma o PC ao imediato U. JAL e JALR habilitam o desvio incondicional e escrevem PC+4 no registrador destino. O campo \textit{func7} não é utilizado por essas instruções; JALR tem \textit{func3}=\texttt{000} na codificação RV32I, embora a implementação atual decodifique JALR pelo \textit{opcode}.
+
+\paragraph{Verificação.}
+O testbench \texttt{tb\_control\_unit} constrói instruções completas e verifica os sinais de controle esperados para operações da ALU, loads, stores, desvios, saltos e instruções do tipo U. As mudanças de instrução são aplicadas na borda de descida do clock de referência, e as saídas combinacionais são verificadas após um pequeno atraso. O clock do testbench organiza a sequência de estímulos; a unidade de controle em si não é sequencial e não recebe clock.
+

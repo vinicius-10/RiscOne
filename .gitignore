@@ -1,0 +1,36 @@
+# Saidas geradas pelo Vivado
+*.runs/
+*.cache/
+*.sim/
+*.hw/
+*.ip_user_files/
+*.gen/
+.Xil/
+*.srcs/utils_1/
+
+# Logs, journals e relatorios
+*.log
+*.jou
+*.str
+*.backup.*
+vivado_pid*.zip
+webtalk*
+
+# Artefatos de simulacao (xsim)
+xsim.dir/
+*.wdb
+*.pb
+*.wcfg.bak
+
+# LaTeX (auxiliares)
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+
+# Sistema/editor
+.vscode/
+Thumbs.db
+desktop.ini
