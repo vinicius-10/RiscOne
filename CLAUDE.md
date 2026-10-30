@@ -11,7 +11,7 @@ Single-cycle RISC-V RV32I processor in SystemVerilog, built as a Vivado 2025.2 p
 ## Source layout that matters
 
 - `processador_riscV.srcs/sources_1/new/` — all RTL and packages. Everything else under `processador_riscV.*/` (`.runs`, `.sim`, `.cache`, `.hw`, `.ip_user_files`) is Vivado-generated output; don't edit it.
-- `processador_riscV.srcs/sim_1/` — testbenches. **Duplicates exist:** `tb_control_unit.sv` and `tb_write_back.sv` are in both `sim_1/new/` and `sim_1/imports/new/`, and the two `tb_control_unit.sv` copies differ. The `.xpr` uses the `imports/new/` copies of those two; the other testbenches come from `sim_1/new/`. Edit the copy the project references (check `processador_riscV.xpr` `sim_1` fileset).
+- `processador_riscV.srcs/sim_1/` — testbenches. Most live in `sim_1/new/`, but `tb_control_unit.sv` and `tb_write_back.sv` live in `sim_1/imports/new/` (that is the path the `.xpr` `sim_1` fileset references).
 - Memory images `program_bytes.mem` / `data.mem` (loaded via `$readmemh`) also exist in two places: `sources_1/imports/new/` and `sim_1/new/`. `$readmemh` resolves paths relative to the simulator's run directory, so copy the `.mem` files there when simulating outside the Vivado GUI.
 
 ## Simulation (xsim)
