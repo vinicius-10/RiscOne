@@ -17,7 +17,11 @@
       "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\run_tb.ps1)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File D:\\valuc\\vivado\\projects\\processador_riscV\\scripts\\run_tb.ps1)",
       "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\build_sw.ps1 selftest)",
-      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\build_sw.ps1 leds)"
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\build_sw.ps1 leds)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\synth.ps1)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\synth.ps1 *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File D:\\valuc\\vivado\\projects\\processador_riscV\\scripts\\synth.ps1)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File D:\\valuc\\vivado\\projects\\processador_riscV\\scripts\\synth.ps1 *)"
     ]
   }
 }

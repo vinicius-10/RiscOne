@@ -21,7 +21,9 @@ Alvo padrão: `xc7a100tcsg324-1`, clock de **100 MHz** (`create_clock -period 10
 ```
 (sempre via `powershell -ExecutionPolicy Bypass -File ...`)
 
-Em `build/synth/<tag>/`: `resumo.txt` (WNS, TNS, Fmax estimada, área, latches, 5 piores caminhos), `timing.rpt` (detalhe célula a célula dos 10 piores), `paths.rpt` (20 caminhos em tabela), `util_hier.rpt` (área por módulo), `vivado.log`.
+Em `build/synth/<tag>/`: `resumo.txt` (WNS, TNS, Fmax estimada, área, latches, 5 piores caminhos), `timing.rpt` (detalhe célula a célula dos 10 piores), `paths.rpt` (20 caminhos em tabela), `util_hier.rpt` (área por módulo), `methodology.rpt` (regras de boas práticas do Vivado; resumidas no `resumo.txt`), `vivado.log`.
+
+Avisos de methodology esperados neste projeto (não são o gargalo): `TIMING-18` (sem `set_input/output_delay` nos pinos de chaves/LEDs/botões, assíncronos por natureza), `HPDR-1` (direção dos pinos `JA` inout do PMOD) e `TIMING-16` (consequência do WNS negativo). `ULMTCS-2` (control sets demais) vem dos ~32 mil FFs da `data_memory` e deve sumir quando ela virar RAM.
 
 **O programa carregado muda o resultado.** A IMEM é uma ROM com conteúdo conhecido na síntese, então o Vivado remove toda lógica que aquele programa nunca usa (com o programa de 5 instruções da placa, o PC ficou com 3 FFs). Por isso:
 - Para medir o **processador**, use `-App selftest` (padrão), que exercita quase todas as instruções. Compare sempre runs com o **mesmo** programa.

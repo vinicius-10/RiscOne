@@ -88,6 +88,7 @@ report_timing_summary -max_paths 10 -file timing.rpt
 report_timing -max_paths 20 -nworst 1 -path_type summary -file paths.rpt
 report_utilization -file util.rpt
 report_utilization -hierarchical -hierarchical_depth 4 -file util_hier.rpt
+report_methodology -file methodology.rpt
 "@
 Set-Content -Path (Join-Path $Out 'run.tcl') -Value $tcl -Encoding ascii
 
@@ -159,6 +160,17 @@ $f8   = UtilVal 'F8 Muxes'
 $latches  = @($log | Where-Object { $_ -match 'Synth 8-327|inferring latch' })
 $critWarn = @($log | Where-Object { $_ -match '^CRITICAL WARNING' })
 
+# Regras violadas no report_methodology (tabela "| ID | Severity | Description | Violations |").
+$meth = @()
+$methFile = Join-Path $Out 'methodology.rpt'
+if (Test-Path $methFile) {
+    foreach ($l in Get-Content $methFile) {
+        if ($l -match '^\|\s*([A-Z]+-\d+)\s*\|\s*([\w ]+?)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*\|') {
+            $meth += [pscustomobject]@{ Id = $Matches[1]; Sev = $Matches[2]; Desc = $Matches[3]; N = [int]$Matches[4] }
+        }
+    }
+}
+
 # ---- resumo -------------------------------------------------------------------------
 $etapaRpt = if ($SynthOnly) { 'pos-sintese (estimativa, sem roteamento)' } else { 'pos-roteamento' }
 $r = New-Object System.Collections.Generic.List[string]
@@ -167,6 +179,10 @@ $r.Add("Tag: $Tag  |  programa: $appUsed  |  $etapaRpt  |  $([math]::Round($sw.E
 $r.Add(('Timing: periodo {0} ns | WNS {1} ns | TNS {2} ns | endpoints violando {3} | WHS {4} ns | Fmax estimada {5} MHz' -f $period, $wns, $tns, $failEp, $whs, $fmax))
 $r.Add("Area: LUTs $luts (LUTRAM $lutram) | FFs $ffs | BRAM $bram | DSP $dsp | F7 $f7 | F8 $f8")
 $r.Add("Latches inferidos: $($latches.Count) | CRITICAL WARNINGs: $($critWarn.Count)")
+if (Test-Path $methFile) {
+    $r.Add("Methodology: $($meth.Count) regras violadas (ver methodology.rpt)")
+    foreach ($m in $meth) { $r.Add(("   {0} [{1}] {2}: {3}" -f $m.Id, $m.Sev, $m.Desc, $m.N)) }
+}
 $r.Add('')
 $r.Add('Piores caminhos (setup):')
 $n = 0
