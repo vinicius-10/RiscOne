@@ -45,11 +45,11 @@ module tb_alu;
     logic [XLEN-1:0] alu_o;
     logic            alu_lsb_o;
 
-    // Estat?sticas do Teste
+    // Estatísticas do Teste
     int total_tests = 0;
     int error_count = 0;
 
-    // Instancia??o do DUT (Design Under Test)
+    // Instanciação do DUT (Design Under Test)
     alu #(
         .XLEN(XLEN)
     ) dut (
@@ -63,7 +63,7 @@ module tb_alu;
 
 
     // ------------------------------------------------------------------------
-    // Modelo de Refer?ncia (Usado APENAS no Teste Aleat?rio)
+    // Modelo de Referência (Usado APENAS no Teste Aleatório)
     // ------------------------------------------------------------------------
     function automatic logic [XLEN-1:0] ref_alu(
         input logic [XLEN-1:0] a,
@@ -88,7 +88,7 @@ module tb_alu;
     endfunction
 
     // ------------------------------------------------------------------------
-    // TASK 1: Verifica??o Direcionada (Resultado Esperado Manual)
+    // TASK 1: Verificação Direcionada (Resultado Esperado Manual)
     // ------------------------------------------------------------------------
     task automatic check_manual(
         input logic [XLEN-1:0] a,
@@ -103,7 +103,7 @@ module tb_alu;
         b_i      = b;
         alu_op_i = op;
 
-        #10; // Aguarda a propaga??o combinacional
+        #10; // Aguarda a propagação combinacional
 
         exp_lsb = exp_alu[0]; // A flag alu_lsb_o reflete o bit [0] do resultado manual
         total_tests++;
@@ -118,7 +118,7 @@ module tb_alu;
     endtask
 
     // ------------------------------------------------------------------------
-    // TASK 2: Verifica??o Aleat?ria (Resultado Esperado Calculado Autom?tico)
+    // TASK 2: Verificação Aleatória (Resultado Esperado Calculado Automático)
     // ------------------------------------------------------------------------
     task automatic check_random(
         input logic [XLEN-1:0] a,
@@ -129,15 +129,15 @@ module tb_alu;
         logic [XLEN-1:0] exp_alu;
         
         exp_alu = ref_alu(a, b, op); // Calcula automaticamente
-        check_manual(a, b, op, exp_alu, test_name); // Reutiliza a compara??o
+        check_manual(a, b, op, exp_alu, test_name); // Reutiliza a comparação
     endtask
 
     // ------------------------------------------------------------------------
-    // Execu??o dos Est?mulos
+    // Execução dos Estímulos
     // ------------------------------------------------------------------------
     initial begin
         $display("==================================================");
-        $display("   INICIANDO SIMULA??O DA ULA (%0d bits)", XLEN);
+        $display("   INICIANDO SIMULAÇÃO DA ULA (%0d bits)", XLEN);
         $display("==================================================");
 
         // ====================================================================
@@ -147,46 +147,46 @@ module tb_alu;
 
         // Sintaxe: check_manual(A, B, OP, RESULTADO_ESPERADO, "NOME_DO_TESTE");
         
-        // Zeros e Compara??es de Igualdade
+        // Zeros e Comparações de Igualdade
         check_manual(32'h0000_0000, 32'h0000_0000, OP_ADD, 32'h0000_0000, "Soma de Zeros");
-        check_manual(32'h0000_0000, 32'h0000_0000, OP_SUB, 32'h0000_0000, "Subtra??o de Zeros");
+        check_manual(32'h0000_0000, 32'h0000_0000, OP_SUB, 32'h0000_0000, "Subtração de Zeros");
         check_manual(32'h1234_5678, 32'h1234_5678, OP_CMP, 32'h0000_0001, "Igualdade (Retorna 1)");
         check_manual(32'h1234_5678, 32'h8765_4321, OP_CMP, 32'h0000_0000, "Desigualdade (Retorna 0)");
 
-        // Aritm?tica, Overflow e Underflow
+        // Aritmética, Overflow e Underflow
         check_manual(32'h7FFF_FFFF, 32'h0000_0001, OP_ADD, 32'h8000_0000, "Overflow Int Positivo");
         check_manual(32'h8000_0000, 32'h0000_0001, OP_SUB, 32'h7FFF_FFFF, "Underflow Int Negativo");
 
         // SLT (Com Sinal) vs SLTU (Sem Sinal)
-        // Exemplo: 0xFFFFFFFF ? -1 em Signed, mas 4294967295 em Unsigned
+        // Exemplo: 0xFFFFFFFF é -1 em Signed, mas 4294967295 em Unsigned
         check_manual(32'hFFFF_FFFF, 32'h0000_0001, OP_SLT,  32'h0000_0001, "SLT:  -1 < 1 (1)");
         check_manual(32'hFFFF_FFFF, 32'h0000_0001, OP_SLTU, 32'h0000_0000, "SLTU: MAX_UINT < 1 (0)");
 
         // Deslocamentos Limite (Shifts)
         check_manual(32'h8000_0001, 32'd0,  OP_SRA, 32'h8000_0001, "SRA com shamt 0");
-        check_manual(32'h8000_0000, 32'd31, OP_SRA, 32'hFFFF_FFFF, "SRA (Extens?o de sinal de 1s)");
+        check_manual(32'h8000_0000, 32'd31, OP_SRA, 32'hFFFF_FFFF, "SRA (Extensão de sinal de 1s)");
         check_manual(32'h8000_0000, 32'd31, OP_SRL, 32'h0000_0001, "SRL (Preenchimento com 0s)");
 
 
         // ====================================================================
-        // 2. TESTES DE ESTRESSE ALEAT?RIO (Valores Esperados AUTOM?TICOS)
+        // 2. TESTES DE ESTRESSE ALEATÓRIO (Valores Esperados AUTOMÁTICOS)
         // ====================================================================
-        $display("\n--- Executando 1000 Testes Aleat?rios (C?lculo Autom?tico) ---");
+        $display("\n--- Executando 1000 Testes Aleatórios (Cálculo Automático) ---");
         
         for (int i = 0; i < 1000; i++) begin
             logic [XLEN-1:0] rand_a  = $urandom();
             logic [XLEN-1:0] rand_b  = $urandom();
             alu_op_t         rand_op = alu_op_t'($urandom_range(0, 11));
 
-            check_random(rand_a, rand_b, rand_op, "Estresse Aleat?rio");
+            check_random(rand_a, rand_b, rand_op, "Estresse Aleatório");
         end
 
 
         // ====================================================================
-        // 3. RELAT?RIO FINAL
+        // 3. RELATÓRIO FINAL
         // ====================================================================
         $display("==================================================");
-        $display("   FINAL DA SIMULA??O");
+        $display("   FINAL DA SIMULAÇÃO");
         $display("   Total de Testes Executados: %0d", total_tests);
         if (error_count == 0) begin
             $display("   STATUS: SUCCESS! Todos os testes passaram.");

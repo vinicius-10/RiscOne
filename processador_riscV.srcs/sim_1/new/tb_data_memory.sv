@@ -39,13 +39,13 @@
 
 `timescale 1ns / 1ps
 
-// Importa os enums e tipos da mem?ria de dados
+// Importa os enums e tipos da memória de dados
 module tb_data_memory;
 
     import mem_pkg::*;
 
     // =========================================================================
-    // 1. PAR?METROS E SINAIS DE INTERFACE
+    // 1. PARÂMETROS E SINAIS DE INTERFACE
     // =========================================================================
     localparam int XLEN = 32;
     localparam int MEM_DEPTH = 1024;
@@ -65,7 +65,7 @@ module tb_data_memory;
     integer fail_count = 0;
 
     // =========================================================================
-    // 2. INSTANCIA??O DO DUT (Device Under Test)
+    // 2. INSTANCIAÇÃO DO DUT (Device Under Test)
     // =========================================================================
     data_memory #(
         .XLEN(XLEN),
@@ -83,12 +83,12 @@ module tb_data_memory;
 
 
     // =========================================================================
-    // 3. GERA??O DO CLOCK (Per?odo = 10ns)
+    // 3. GERAÇÃO DO CLOCK (Período = 10ns)
     // =========================================================================
     always #5 clk = ~clk;
 
     // =========================================================================
-    // 4. TASK DE COMPARA??O E INSPE??O DA MEM?RIA INTERNA
+    // 4. TASK DE COMPARAÇÃO E INSPEÇÃO DA MEMÓRIA INTERNA
     // =========================================================================
     task automatic check_result(
         input int              test_num,
@@ -98,9 +98,9 @@ module tb_data_memory;
         logic [7:0] b0, b1, b2, b3;
         int word_idx;
         begin
-            #1; // Estabiliza??o ap?s a borda do clock
+            #1; // Estabilização após a borda do clock
             
-            // Calcula o ?ndice de palavra da mem?ria interna (addr_i / 4)
+            // Calcula o índice de palavra da memória interna (addr_i / 4)
             word_idx = addr_i >> 2;
             
             // Leitura direta da matriz interna mem[0:MEM_DEPTH-1][0:3]
@@ -122,10 +122,10 @@ module tb_data_memory;
     endtask
 
     // =========================================================================
-    // 5. SEQU?NCIA DE TESTES
+    // 5. SEQUÊNCIA DE TESTES
     // =========================================================================
     initial begin
-        // Inicializa??o de sinais
+        // Inicialização de sinais
         clk          = 0;
         addr_i       = 32'h0000_0000;
         data_i       = 32'h0000_0000;
@@ -134,211 +134,211 @@ module tb_data_memory;
         mem_signed_i = MEM_SIGNED;
 
         $display("\n=========================================================================");
-        $display("     INICIANDO BATERIA DE TESTES - M?DULO DE MEM?RIA (DATA_MEMORY)      ");
+        $display("     INICIANDO BATERIA DE TESTES - MÓDULO DE MEMÓRIA (DATA_MEMORY)      ");
         $display("=========================================================================\n");
 
         // ---------------------------------------------------------------------
-        // SE??O 1: ESCRITA E LEITURA DE PALAVRA COMPLETA (WORD - 32 BITS)
+        // SEÇÃO 1: ESCRITA E LEITURA DE PALAVRA COMPLETA (WORD - 32 BITS)
         // ---------------------------------------------------------------------
 
         @(negedge clk); // TESTE 01: Escrita de Word (SW)
-        addr_i       = 32'h0000_0004; // Endere?o de mem?ria (Palavra 1)
+        addr_i       = 32'h0000_0004; // Endereço de memória (Palavra 1)
         data_i       = 32'h1234_5678; // Dado de 32 bits a ser escrito
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA (1 = Escreve na mem?ria)
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA (1 = Escreve na memória)
         mem_width_i  = MEM_WIDTH_WORD;// Largura do acesso: Word completa (32 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal (Ignorado na escrita)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal (Ignorado na escrita)
         @(posedge clk);
         check_result(1, "Escrita Word (SW): 0x12345678 no addr 0x04", 32'h1234_5678);
 
         @(negedge clk); // TESTE 02: Leitura de Word (LW)
-        addr_i       = 32'h0000_0004; // Endere?o de mem?ria (Palavra 1)
+        addr_i       = 32'h0000_0004; // Endereço de memória (Palavra 1)
         data_i       = 32'h0000_0000; // Dado de entrada zerado (ignorado na leitura)
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA (0 = Leitura)
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA (0 = Leitura)
         mem_width_i  = MEM_WIDTH_WORD;// Largura do acesso: Word completa (32 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal (32 bits diretos)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal (32 bits diretos)
         @(posedge clk);
         check_result(2, "Leitura Word (LW): Lendo addr 0x04", 32'h1234_5678);
 
         // ---------------------------------------------------------------------
-        // SE??O 2: ESCRITA E LEITURA DE MEIA PALAVRA (HALFWORD - 16 BITS)
+        // SEÇÃO 2: ESCRITA E LEITURA DE MEIA PALAVRA (HALFWORD - 16 BITS)
         // ---------------------------------------------------------------------
 
         @(negedge clk); // TESTE 03: Escrita Halfword (SH) no offset 0 (bytes 0 e 1)
-        addr_i       = 32'h0000_0008; // Endere?o de mem?ria (Palavra 2)
-        data_i       = 32'h0000_ABCD; // Dado de 16 bits nos LSBs (0xABCD ? negativo com sinal)
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        addr_i       = 32'h0000_0008; // Endereço de memória (Palavra 2)
+        data_i       = 32'h0000_ABCD; // Dado de 16 bits nos LSBs (0xABCD é negativo com sinal)
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_HALF;// Largura do acesso: Halfword (16 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal (Ignorado na escrita)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal (Ignorado na escrita)
         @(posedge clk);
         check_result(3, "Escrita Halfword (SH): 0xABCD no addr 0x08 (Offset 0)", 32'hffff_ABCD);
 
         @(negedge clk); // TESTE 04: Leitura Halfword Signed (LH) - Estende sinal negativo
-        addr_i       = 32'h0000_0008; // Endere?o de mem?ria (Palavra 2, offset 0)
+        addr_i       = 32'h0000_0008; // Endereço de memória (Palavra 2, offset 0)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_HALF;// Largura do acesso: Halfword (16 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: COM SINAL (0xABCD -> 0xFFFFABCD)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: COM SINAL (0xABCD -> 0xFFFFABCD)
         @(posedge clk);
         check_result(4, "Leitura Halfword Signed (LH): 0xABCD -> 0xFFFFABCD", 32'hFFFF_ABCD);
 
         @(negedge clk); // TESTE 05: Leitura Halfword Unsigned (LHU) - Estende zero
-        addr_i       = 32'h0000_0008; // Endere?o de mem?ria (Palavra 2, offset 0)
+        addr_i       = 32'h0000_0008; // Endereço de memória (Palavra 2, offset 0)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_HALF;// Largura do acesso: Halfword (16 bits)
-        mem_signed_i = MEM_UNSIGNED;  // Sinaliza??o: SEM SINAL (0xABCD -> 0x0000ABCD)
+        mem_signed_i = MEM_UNSIGNED;  // Sinalização: SEM SINAL (0xABCD -> 0x0000ABCD)
         @(posedge clk);
         check_result(5, "Leitura Halfword Unsigned (LHU): 0xABCD -> 0x0000ABCD", 32'h0000_ABCD);
 
         @(negedge clk); // TESTE 06: Escrita Halfword (SH) no offset 2 (bytes 2 e 3)
-        addr_i       = 32'h0000_000A; // Endere?o de mem?ria (Palavra 2, offset 2)
+        addr_i       = 32'h0000_000A; // Endereço de memória (Palavra 2, offset 2)
         data_i       = 32'h0000_1234; // Dado de 16 bits nos LSBs
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_HALF;// Largura do acesso: Halfword (16 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal (Ignorado na escrita)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal (Ignorado na escrita)
         @(posedge clk);
         check_result(6, "Escrita Halfword (SH): 0x1234 no addr 0x0A (Offset 2)", 32'h0000_1234);
 
         @(negedge clk); // TESTE 07: Leitura Word Inteira da Palavra 2 (Verifica 0x1234ABCD)
-        addr_i       = 32'h0000_0008; // Endere?o base da Palavra 2 (0x08)
+        addr_i       = 32'h0000_0008; // Endereço base da Palavra 2 (0x08)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_WORD;// Largura do acesso: Word completa (32 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(7, "Leitura Word Completa: Verifica mescla SH (0x1234ABCD)", 32'h1234_ABCD);
 
         // ---------------------------------------------------------------------
-        // SE??O 3: ESCRITA E LEITURA DE BYTE (BYTE - 8 BITS)
+        // SEÇÃO 3: ESCRITA E LEITURA DE BYTE (BYTE - 8 BITS)
         // ---------------------------------------------------------------------
 
         @(negedge clk); // TESTE 08: Escrita de Byte (SB) no Byte 0
-        addr_i       = 32'h0000_0010; // Endere?o de mem?ria (Palavra 4, Byte 0)
+        addr_i       = 32'h0000_0010; // Endereço de memória (Palavra 4, Byte 0)
         data_i       = 32'h0000_0080; // Byte = 0x80 (negativo em complemento de 2)
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal (Ignorado na escrita)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal (Ignorado na escrita)
         @(posedge clk);
         check_result(8, "Escrita Byte (SB): 0x80 no addr 0x10 (Byte 0)", 32'hFFFF_FF80);
 
         @(negedge clk); // TESTE 09: Leitura Byte Signed (LB) - Estende sinal negativo
-        addr_i       = 32'h0000_0010; // Endere?o de mem?ria (Palavra 4, Byte 0)
+        addr_i       = 32'h0000_0010; // Endereço de memória (Palavra 4, Byte 0)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: COM SINAL (0x80 -> 0xFFFFFF80)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: COM SINAL (0x80 -> 0xFFFFFF80)
         @(posedge clk);
         check_result(9, "Leitura Byte Signed (LB): 0x80 -> 0xFFFFFF80", 32'hFFFF_FF80);
 
         @(negedge clk); // TESTE 10: Leitura Byte Unsigned (LBU) - Estende zero
-        addr_i       = 32'h0000_0010; // Endere?o de mem?ria (Palavra 4, Byte 0)
+        addr_i       = 32'h0000_0010; // Endereço de memória (Palavra 4, Byte 0)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_UNSIGNED;  // Sinaliza??o: SEM SINAL (0x80 -> 0x00000080)
+        mem_signed_i = MEM_UNSIGNED;  // Sinalização: SEM SINAL (0x80 -> 0x00000080)
         @(posedge clk);
         check_result(10, "Leitura Byte Unsigned (LBU): 0x80 -> 0x00000080", 32'h0000_0080);
 
         @(negedge clk); // TESTE 11: Escrita de Byte (SB) no Byte 1
-        addr_i       = 32'h0000_0011; // Endere?o de mem?ria (Palavra 4, Byte 1)
+        addr_i       = 32'h0000_0011; // Endereço de memória (Palavra 4, Byte 1)
         data_i       = 32'h0000_007F; // Byte = 0x7F (positivo com sinal)
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(11, "Escrita Byte (SB): 0x7F no addr 0x11 (Byte 1)", 32'h0000_007F);
 
         @(negedge clk); // TESTE 12: Escrita de Byte (SB) no Byte 2
-        addr_i       = 32'h0000_0012; // Endere?o de mem?ria (Palavra 4, Byte 2)
+        addr_i       = 32'h0000_0012; // Endereço de memória (Palavra 4, Byte 2)
         data_i       = 32'h0000_00FE; // Byte = 0xFE
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(12, "Escrita Byte (SB): 0xFE no addr 0x12 (Byte 2)", 32'hFFFF_FFFE);
 
         @(negedge clk); // TESTE 13: Escrita de Byte (SB) no Byte 3
-        addr_i       = 32'h0000_0013; // Endere?o de mem?ria (Palavra 4, Byte 3)
+        addr_i       = 32'h0000_0013; // Endereço de memória (Palavra 4, Byte 3)
         data_i       = 32'h0000_0012; // Byte = 0x12
-        mem_write_i  = 1'b1;          // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;          // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(13, "Escrita Byte (SB): 0x12 no addr 0x13 (Byte 3)", 32'h0000_0012);
 
         @(negedge clk); // TESTE 14: Leitura Byte 1 Signed (LB positivo)
-        addr_i       = 32'h0000_0011; // Endere?o de mem?ria (Palavra 4, Byte 1)
+        addr_i       = 32'h0000_0011; // Endereço de memória (Palavra 4, Byte 1)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;// Largura do acesso: Byte (8 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: COM SINAL (0x7F -> 0x0000007F)
+        mem_signed_i = MEM_SIGNED;    // Sinalização: COM SINAL (0x7F -> 0x0000007F)
         @(posedge clk);
         check_result(14, "Leitura Byte Signed (LB): 0x7F -> 0x0000007F", 32'h0000_007F);
 
         @(negedge clk); // TESTE 15: Leitura Word Inteira montada por 4 SBs (0x12FE7F80)
-        addr_i       = 32'h0000_0010; // Endere?o base da Palavra 4 (0x10)
+        addr_i       = 32'h0000_0010; // Endereço base da Palavra 4 (0x10)
         data_i       = 32'h0000_0000; // Dado de entrada zerado
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_WORD;// Largura do acesso: Word completa (32 bits)
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(15, "Leitura Word Completa: Verifica montagem de 4 SBs", 32'h12FE_7F80);
 
         // ---------------------------------------------------------------------
-        // SE??O 4: CASOS LIMITE E PROTE??O DE ESCRITA (EDGE CASES)
+        // SEÇÃO 4: CASOS LIMITE E PROTEÇÃO DE ESCRITA (EDGE CASES)
         // ---------------------------------------------------------------------
 
-        @(negedge clk); // TESTE 16: Tentativa de escrita com mem_write_i = 0 (N?o altera)
-        addr_i       = 32'h0000_0004; // Endere?o da Palavra 1 (que cont?m 0x12345678)
+        @(negedge clk); // TESTE 16: Tentativa de escrita com mem_write_i = 0 (Não altera)
+        addr_i       = 32'h0000_0004; // Endereço da Palavra 1 (que contém 0x12345678)
         data_i       = 32'hFFFF_FFFF; // Tentativa de sobrescrever com 0xFFFFFFFF
-        mem_write_i  = 1'b0;          // Habilita??o de escrita: DESABILITADA (0 = Impede escrita)
+        mem_write_i  = 1'b0;          // Habilitação de escrita: DESABILITADA (0 = Impede escrita)
         mem_width_i  = MEM_WIDTH_WORD;// Largura do acesso: Word completa
-        mem_signed_i = MEM_SIGNED;    // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;    // Sinalização: Com sinal
         @(posedge clk);
         check_result(16, "Protecao de Escrita (mem_write=0): Mantem 0x12345678", 32'h1234_5678);
 
-        @(negedge clk); // TESTE 17: Escrita no ?ltimo endere?o de palavra da mem?ria
-        addr_i       = (MEM_DEPTH - 1) * 4; // ?ltimo endere?o v?lido de 32 bits
+        @(negedge clk); // TESTE 17: Escrita no último endereço de palavra da memória
+        addr_i       = (MEM_DEPTH - 1) * 4; // último endereço válido de 32 bits
         data_i       = 32'hCAFE_BABE;       // Dado a ser escrito
-        mem_write_i  = 1'b1;                // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;                // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_WORD;      // Largura do acesso: Word completa
-        mem_signed_i = MEM_SIGNED;          // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;          // Sinalização: Com sinal
         @(posedge clk);
         check_result(17, "Escrita Word no ultimo endereco da memoria", 32'hCAFE_BABE);
 
-        @(negedge clk); // TESTE 18: Leitura no ?ltimo endere?o da mem?ria
-        addr_i       = (MEM_DEPTH - 1) * 4; // ?ltimo endere?o
+        @(negedge clk); // TESTE 18: Leitura no último endereço da memória
+        addr_i       = (MEM_DEPTH - 1) * 4; // último endereço
         data_i       = 32'h0000_0000;       // Dado de entrada zerado
-        mem_write_i  = 1'b0;                // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;                // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_WORD;      // Largura do acesso: Word completa
-        mem_signed_i = MEM_SIGNED;          // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;          // Sinalização: Com sinal
         @(posedge clk);
         check_result(18, "Leitura Word no ultimo endereco da memoria", 32'hCAFE_BABE);
 
         @(negedge clk); // TESTE 19: Sobrescrita parcial - altera apenas Byte 1 da Word anterior
-        addr_i       = ((MEM_DEPTH - 1) * 4) + 1; // Endere?o do Byte 1 do ?ltimo elemento
+        addr_i       = ((MEM_DEPTH - 1) * 4) + 1; // Endereço do Byte 1 do último elemento
         data_i       = 32'h0000_0000;             // Sobrescreve com 0x00 no Byte 1
-        mem_write_i  = 1'b1;                      // Habilita??o de escrita: ATIVADA
+        mem_write_i  = 1'b1;                      // Habilitação de escrita: ATIVADA
         mem_width_i  = MEM_WIDTH_BYTE;            // Largura do acesso: Byte
-        mem_signed_i = MEM_SIGNED;                // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;                // Sinalização: Com sinal
         @(posedge clk);
         check_result(19, "Sobrescrita de Byte 1 no ultimo elemento", 32'h0000_0000);
 
-        @(negedge clk); // TESTE 20: Leitura Word no ?ltimo elemento para confirmar efeito (0xCAFE00BE)
-        addr_i       = (MEM_DEPTH - 1) * 4; // Endere?o base da palavra
+        @(negedge clk); // TESTE 20: Leitura Word no último elemento para confirmar efeito (0xCAFE00BE)
+        addr_i       = (MEM_DEPTH - 1) * 4; // Endereço base da palavra
         data_i       = 32'h0000_0000;       // Dado de entrada zerado
-        mem_write_i  = 1'b0;                // Habilita??o de escrita: DESATIVADA
+        mem_write_i  = 1'b0;                // Habilitação de escrita: DESATIVADA
         mem_width_i  = MEM_WIDTH_WORD;      // Largura do acesso: Word completa
-        mem_signed_i = MEM_SIGNED;          // Sinaliza??o: Com sinal
+        mem_signed_i = MEM_SIGNED;          // Sinalização: Com sinal
         @(posedge clk);
         check_result(20, "Leitura Word: Verifica modificacao de byte (0xCAFE00BE)", 32'hCAFE_00BE);
 
         // =========================================================================
-        // 6. RELAT?RIO FINAL
+        // 6. RELATÓRIO FINAL
         // =========================================================================
         #10;
         $display("\n=========================================================================");
-        $display("                           RELAT?RIO FINAL                               ");
+        $display("                           RELATÓRIO FINAL                               ");
         $display("=========================================================================");
 
         if (fail_count == 0) begin

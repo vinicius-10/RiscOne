@@ -9,7 +9,7 @@
 // Project Name: processador_riscV
 // Target Devices: Artix-7 Nexys A7-100T
 // Tool Versions: vivado 2025.2
-// Description: Ula para realizar todos as intru?oes do conjunto rv32i
+// Description: Ula para realizar todos as instruções do conjunto rv32i
 // 
 // Dependencies: alu_pkg
 // 
@@ -21,25 +21,25 @@
 
 /**
  * @file alu.sv
- * @brief Unidade L?gica e Aritm?tica (ALU) do processador RV32I.
+ * @brief Unidade Lógica e Aritmética (ALU) do processador RV32I.
  *
- * Esta unidade executa opera??es aritm?ticas, l?gicas, compara??es e
- * deslocamentos sobre dois operandos de entrada. O resultado ? selecionado
- * conforme o c?digo de opera??o `alu_op_i` e pode ser usado diretamente pelo
+ * Esta unidade executa operações aritméticas, lógicas, comparações e
+ * deslocamentos sobre dois operandos de entrada. O resultado é selecionado
+ * conforme o código de operação `alu_op_i` e pode ser usado diretamente pelo
  * datapath do processador.
  *
- * Opera??es suportadas:
- * - aritm?tica: soma, subtra??o;
- * - l?gica: AND, OR, XOR;
- * - compara??o: SLT, SLTU, CMP;
+ * Operações suportadas:
+ * - aritmética: soma, subtração;
+ * - lógica: AND, OR, XOR;
+ * - comparação: SLT, SLTU, CMP;
  * - deslocamento: SLL, SRL, SRA;
  * - passagem: PASS_B.
  *
- * @param XLEN Largura dos operandos e do resultado da ALU. Valor padr?o: 32 bits.
+ * @param XLEN Largura dos operandos e do resultado da ALU. Valor padrão: 32 bits.
  * @param a_i Operando A de entrada.
  * @param b_i Operando B de entrada.
- * @param alu_op_i C?digo da opera??o a ser executada.
- * @retval alu_o Resultado da opera??o selecionada.
+ * @param alu_op_i Código da operação a ser executada.
+ * @retval alu_o Resultado da operação selecionada.
  * @retval alu_lsb_o Bit 0 (LSB) do resultado `alu_o`. Em CMP/SLT/SLTU o resultado e 0 ou 1, entao este bit e a condicao usada pelos branches.
  */
 module alu import alu_pkg::*; #(
@@ -55,13 +55,13 @@ module alu import alu_pkg::*; #(
 
 
     // --------------------------------------------------------
-    // 1. Bloco Aritm?tico e Compara??es (Compartilhamento CARRY4)
+    // 1. Bloco Aritmético e Comparações (Compartilhamento CARRY4)
     // --------------------------------------------------------
     logic            is_sub;
     logic [XLEN-1:0] b_mux;
     logic [XLEN:0]   add_sub_res; 
 
-    // OP_CMP inclu?do aqui para for?ar a subtra??o (a - b)
+    // OP_CMP incluído aqui para forçar a subtração (a - b)
     assign is_sub = (alu_op_i == OP_SUB)  | 
                     (alu_op_i == OP_SLT)  | 
                     (alu_op_i == OP_SLTU) | 
@@ -75,7 +75,7 @@ module alu import alu_pkg::*; #(
     assign cmp_sltu = ~add_sub_res[XLEN]; 
     assign cmp_slt  = (a_i[XLEN-1] != b_i[XLEN-1]) ? a_i[XLEN-1] : add_sub_res[XLEN-1];
     
-    // Nova L?gica: Se o resultado da subtra??o for 0, os operandos s?o iguais
+    // Nova Lógica: Se o resultado da subtração for 0, os operandos são iguais
     assign cmp_eq   = (add_sub_res[XLEN-1:0] == '0);
 
     logic [XLEN-1:0] res_arith;
@@ -85,7 +85,7 @@ module alu import alu_pkg::*; #(
                        add_sub_res[XLEN-1:0];
 
     // --------------------------------------------------------
-    // 2. Bloco L?gico
+    // 2. Bloco Lógico
     // --------------------------------------------------------
     logic [XLEN-1:0] res_logic;
     always_comb begin
@@ -115,7 +115,7 @@ module alu import alu_pkg::*; #(
     // --------------------------------------------------------
     always_comb begin
         case (alu_op_i)
-            // OP_CMP adicionado ao mux aritm?tico
+            // OP_CMP adicionado ao mux aritmético
             OP_ADD, OP_SUB, OP_SLT, OP_SLTU, OP_CMP: alu_o = res_arith;
             OP_AND, OP_OR, OP_XOR, OP_PASS_B:        alu_o = res_logic;
             OP_SLL, OP_SRL, OP_SRA:                  alu_o = res_shift;
@@ -124,7 +124,7 @@ module alu import alu_pkg::*; #(
     end
 
     // --------------------------------------------------------
-    // Flag alu_lsb_o: reflete o LSB (Bit 0) da sa?da
+    // Flag alu_lsb_o: reflete o LSB (Bit 0) da saída
     // --------------------------------------------------------
     assign alu_lsb_o = alu_o[0];
 
