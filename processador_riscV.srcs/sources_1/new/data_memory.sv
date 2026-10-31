@@ -61,7 +61,7 @@ module data_memory
     // =========================================================================
     // DECODIFICAÇÃO DE ENDEREÇOS (Otimizada para Caminho Crítico)
     // Mapeamento:
-    //   - 0x0000_0000 até 0x0000_3FFF -> RAM Interna
+    //   - 0x0000_0000 até MEM_DEPTH*4-1 (0x0000_0FFF com MEM_DEPTH = 1024) -> RAM Interna
     //   - 0x4000_0000 em diante      -> Espaço de I/O (MMIO)
     // =========================================================================
     logic                  is_io_space;

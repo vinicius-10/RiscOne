@@ -13,7 +13,11 @@
       "Bash(/d/ProgramFiles/AMDVitis/2025.2/Vivado/bin/xvlog.bat *)",
       "Bash(/d/ProgramFiles/AMDVitis/2025.2/Vivado/bin/xelab.bat *)",
       "Bash(/d/ProgramFiles/AMDVitis/2025.2/Vivado/bin/xsim.bat *)",
-      "Bash(powershell -ExecutionPolicy Bypass -File ./scripts/run_tb.ps1 *)"
+      "Bash(powershell -ExecutionPolicy Bypass -File ./scripts/run_tb.ps1 *)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\run_tb.ps1)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File D:\\valuc\\vivado\\projects\\processador_riscV\\scripts\\run_tb.ps1)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\build_sw.ps1 selftest)",
+      "PowerShell(powershell -ExecutionPolicy Bypass -File .\\scripts\\build_sw.ps1 leds)"
     ]
   }
 }

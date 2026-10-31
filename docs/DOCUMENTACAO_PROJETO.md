@@ -190,16 +190,26 @@ O repositório contém testbenches dos blocos principais e o testbench de sistem
 
 Síntese, implementação e validação física na placa não foram verificadas por esta documentação.
 
-## 8. Questões em aberto e divergências a confirmar
+## 8. Decisões de escopo e questões resolvidas
 
-1. **Flag `alu_lsb_o` (antes `zero_o`):** atribui `alu_o[0]`; foi renomeada porque não é uma flag de resultado zero. A ALU retorna comparações como `0` ou `1`; portanto branches consomem esse bit como condição. Deve-se preservar ou substituir por flags explícitas segundo a intenção do projeto.
-2. **`SLTU` (resolvido):** `cmp_sltu = ~carry` de `a + ~b + 1`; o carry vale 1 exatamente quando `a >= b` sem sinal, então `~carry` é `a < b`. Confirmado por `tb_alu` e `tb_core` (`sltu`, `sltiu`, `bltu`, `bgeu`).
-3. **Alinhamento do destino (conforme a ISA):** `execution` zera apenas o bit 0, como a ISA exige para `JALR`. Destinos com bit 1 em 1 não geram exceção de desalinhamento; o PC é usado com `addr[1:0]` descartado pela memória de instruções.
-4. **Endereços da RAM:** comentário de `data_memory` cita faixa até `0x3FFF`, mas a validação efetiva usa `addr_i < MEM_DEPTH * 4` (4096 bytes com parâmetros padrão, até `0x0FFF`). A lógica é que vale.
-5. **Loads/stores MMIO parciais (resolvido):** byte/halfword em MMIO usam a mesma seleção de bytes e extensão de sinal da RAM; ver seção 2.3.
-6. **Caminhos de memória:** `search` agora também usa `program_bytes.mem` como default. Os arquivos `.mem` ficam somente em `sources_1/imports/new/` (cópia referenciada pelo `.xpr`); o `$readmemh` resolve caminhos relativos ao diretório de execução.
-7. **Reset/estado inicial (resolvido para simulação):** `x1`–`x31` começam em zero por `initial`; o reset continua zerando apenas o PC.
-8. **Traps e instruções de sistema/barreira:** `ECALL`, `EBREAK` e `FENCE` são NOPs; não há CSRs nem traps.
+Não há questões em aberto no momento. Os itens abaixo registram o que foi decidido; não são bugs a corrigir.
+
+### 8.1 Fora do escopo por decisão (31/10/2026)
+
+Por enquanto **não serão implementados** traps nem tratamento de desalinhamento. Podem ser revistos no futuro; se forem, exigem CSRs (`mtvec`, `mepc`, `mcause`, `mtval`) e um caminho de exceção no `search`/`execution`.
+
+1. **Traps/exceções:** não há CSRs, interrupções nem traps. `ECALL`, `EBREAK` e `FENCE` executam como NOP. Instruções inválidas ou não suportadas (opcode desconhecido, `funct3`/`funct7` inválidos, extensão M) também viram NOP: não escrevem nada e o PC avança.
+2. **Alvo de salto desalinhado:** `execution` zera só o bit 0 do alvo (como a ISA exige para `JALR`). Alvos com bit 1 em 1 não geram `instruction-address-misaligned`; a memória de instruções descarta `addr[1:0]`.
+3. **Load/store desalinhado:** halfword/word em endereço não alinhado não é suportado e não gera trap; o resultado é o da seleção de bytes da palavra alinhada. O software deve garantir alinhamento (o GCC já faz isso para dados com tipos naturais).
+
+### 8.2 Resolvidas
+
+1. **Flag `alu_lsb_o` (antes `zero_o`):** renomeada porque é `alu_o[0]`, não uma flag de resultado zero. CMP/SLT/SLTU retornam 0/1 e os branches usam esse bit como condição (BCT/BCF). Convenção mantida.
+2. **`SLTU`:** `~carry` de `a + ~b + 1` está correto; coberto por `tb_alu` e `tb_core`.
+3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4` (até `0x0FFF` com o padrão); o comentário do `data_memory` foi corrigido.
+4. **Loads/stores MMIO parciais:** byte/halfword em MMIO usam as mesmas lanes e extensão de sinal da RAM (seção 2.3).
+5. **Caminhos de memória:** os `.mem` ficam só em `sources_1/imports/new/`; o `$readmemh` resolve caminhos relativos ao diretório de execução.
+6. **Reset/estado inicial:** `x1`–`x31` começam em zero por `initial`; o reset zera apenas o PC.
 
 ## 9. Referência de manutenção
 

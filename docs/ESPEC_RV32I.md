@@ -215,8 +215,10 @@ PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► executi
 | `0x4000_000C` | display 7 seg `seg7_o[15:0]` | L/E |
 | `0x4000_0010` | PMOD: lê linhas `pmod_row_i[3:0]`, escreve colunas `pmod_col_o[3:0]` | L/E |
 
-## 10. Limitações conhecidas
+## 10. Fora do escopo (decisão de 31/10/2026, pode ser revista)
 
+- Sem CSRs, interrupções ou traps; `ECALL`/`EBREAK`/`FENCE` e instruções inválidas são NOP.
 - Só o bit 0 do alvo de JAL/JALR/branch é zerado; alvo desalinhado em palavra não gera trap.
 - Acessos half/word desalinhados não são suportados e não geram trap.
-- Sem CSRs, interrupções ou traps.
+
+Detalhes em `DOCUMENTACAO_PROJETO.md` §8.1.

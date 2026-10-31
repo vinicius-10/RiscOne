@@ -7,6 +7,7 @@
     .\scripts\run_tb.ps1 tb_alu tb_decoder
     .\scripts\run_tb.ps1 -List
     .\scripts\run_tb.ps1 tb_alu -ShowLog # mostra a saida completa da simulacao
+    .\scripts\run_tb.ps1 tb_program -App meu_prog   # roda sw/apps/meu_prog no tb_program
 
 .NOTES
     Saida de cada testbench em build/sim/<tb>/ (ignorado pelo git).
@@ -17,6 +18,7 @@ param(
     [string[]]$Testbench,
     [switch]$List,
     [switch]$ShowLog,
+    [string]$App = 'selftest',   # programa de sw/apps usado pelo tb_program
     [int]$TimeoutSec = 120,
     [string]$VivadoBin = $(if ($env:VIVADO_BIN) { $env:VIVADO_BIN } else { 'D:\ProgramFiles\AMDVitis\2025.2\Vivado\bin' })
 )
@@ -60,7 +62,7 @@ $Tests = [ordered]@{
 # Testbenches que usam um programa compilado (scripts/build_sw.ps1) em vez dos
 # .mem de sources_1/imports/new. O programa e recompilado antes de simular.
 $Programs = @{
-    tb_program = 'selftest'
+    tb_program = $App
 }
 
 if ($List) { $Tests.Keys; exit 0 }
