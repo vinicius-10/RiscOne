@@ -34,3 +34,6 @@ xsim.dir/
 .vscode/
 Thumbs.db
 desktop.ini
+
+# Saida do scripts/run_tb.ps1
+build/

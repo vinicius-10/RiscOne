@@ -8,17 +8,31 @@ Single-cycle RISC-V RV32I processor in SystemVerilog, built as a Vivado 2025.2 p
 
 `README.md` (summary) and `DOCUMENTACAO_PROJETO.md` (spec + open questions) describe the design in detail. The RTL is the source of truth; those docs explicitly flag where comments and code disagree.
 
+## Do not edit `processador_riscV.xpr`
+
+Never modify the Vivado project file (`processador_riscV.xpr`) — not to add/remove sources, change the `sim_1` top, fix paths or anything else. The user manages it through the Vivado GUI. If a change needs the `.xpr` updated (new source file, new testbench, moved file), tell the user what to add/change in Vivado instead of doing it.
+
 ## Source layout that matters
 
 - `processador_riscV.srcs/sources_1/new/` — all RTL and packages. Everything else under `processador_riscV.*/` (`.runs`, `.sim`, `.cache`, `.hw`, `.ip_user_files`) is Vivado-generated output; don't edit it.
 - `processador_riscV.srcs/sim_1/` — testbenches. Most live in `sim_1/new/`, but `tb_control_unit.sv` and `tb_write_back.sv` live in `sim_1/imports/new/` (that is the path the `.xpr` `sim_1` fileset references).
-- Memory images `program_bytes.mem` / `data.mem` (loaded via `$readmemh`) also exist in two places: `sources_1/imports/new/` and `sim_1/new/`. `$readmemh` resolves paths relative to the simulator's run directory, so copy the `.mem` files there when simulating outside the Vivado GUI.
+- Memory images `program_bytes.mem` / `data.mem` (loaded via `$readmemh`) live only in `sources_1/imports/new/` (the copy the `.xpr` uses for synthesis and simulation). `data.mem` is written one byte per hex token (`00 00 00 0A`). `$readmemh` resolves paths relative to the simulator's run directory, so copy the `.mem` files there when simulating outside the Vivado GUI.
 
 ## Simulation (xsim)
 
 Vivado is installed at `D:\ProgramFiles\AMDVitis\2025.2\Vivado\bin` (not on PATH). Testbenches are self-checking: they print `[PASS]`/`[FAIL]` lines and a final summary with an error count, then `$finish`.
 
-In the GUI, set the `sim_1` top module (currently `tb_register_file`) and Run Behavioral Simulation. To run one testbench from a shell, use **PowerShell** in a scratch directory (under Git Bash, `xsim -R` hangs and never prints output). Compile packages before the modules that import them:
+Run testbenches with the script (from PowerShell; under Git Bash `xsim -R` hangs and never prints output):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_tb.ps1            # all testbenches
+powershell -ExecutionPolicy Bypass -File .\scripts\run_tb.ps1 tb_alu     # one (or several)
+powershell -ExecutionPolicy Bypass -File .\scripts\run_tb.ps1 -List      # names; -ShowLog prints full sim output
+```
+
+It compiles all packages + the DUT files for each testbench, copies the `.mem` images into `build/sim/<tb>/` (git-ignored; logs `compile.txt`, `elaborate.txt`, `simulate.txt` stay there), and reports PASS/FAIL by parsing the testbench summary line. Exit code is 0 only if all pass. **When adding a testbench or changing a module's submodules, update the `$Tests` table in `scripts/run_tb.ps1`.** Override the Vivado path with `-VivadoBin` or `$env:VIVADO_BIN`.
+
+In the GUI, set the `sim_1` top module (currently `tb_register_file`) and Run Behavioral Simulation. Manual equivalent of what the script does (packages must be compiled before modules that import them):
 
 ```powershell
 $V = "D:\ProgramFiles\AMDVitis\2025.2\Vivado\bin"
@@ -28,7 +42,7 @@ $S = "D:\valuc\vivado\projects\processador_riscV\processador_riscV.srcs"
 & "$V\xsim.bat" rf_sim -R
 ```
 
-For DUTs that use packages, list `"$S\sources_1\new\*_pkg.sv"` first, then the DUT files and testbench (see each testbench header's `Dependencies:` line). `tb_alu.sv` uses `alu_op_t` before its `import alu_pkg::*;` (line 62), so it fails to elaborate standalone (it likely only builds in the project because other testbenches import packages at compilation-unit scope). The Vivado-generated scripts in `processador_riscV.sim/sim_1/behav/xsim/` (`compile.bat`, `elaborate.bat`, `simulate.bat`, `*_vlog.prj`) show the exact flags the GUI uses for the last-run testbench.
+`tb_instruction_fetch.sv` defines its own `instruction_memory` model, so don't compile the real `instruction_memory.sv` with it. The Vivado-generated scripts in `processador_riscV.sim/sim_1/behav/xsim/` (`compile.bat`, `elaborate.bat`, `simulate.bat`, `*_vlog.prj`) show the exact flags the GUI uses for the last-run testbench.
 
 Synthesis/implementation/bitstream are done through Vivado (GUI or `vivado -mode batch` with a Tcl script opening `processador_riscV.xpr`); there is no checked-in build script.
 
@@ -53,7 +67,9 @@ Naming: ports use `_i`/`_o` suffixes; signals are prefixed with the owning block
 
 ## Known inconsistencies (see `DOCUMENTACAO_PROJETO.md` §8)
 
-- `search.sv` defaults `MEM_FILE` to `program_bytes.hex`, while `core`/`instruction_memory` use `.mem` (core overrides it, so synthesis uses `.mem`).
-- `SLTU` derives from the subtraction carry — verify against the intended semantics.
-- `execution` clears only bit 0 of jump/branch targets.
-- Byte/halfword loads/stores are handled for RAM only, not for MMIO.
+- `execution` clears only bit 0 of jump/branch targets (as the ISA requires for JALR); misaligned targets don't trap.
+- Misaligned halfword/word data accesses aren't supported and don't trap.
+- `ECALL`/`EBREAK`/`FENCE` are NOPs; there are no CSRs or traps. Decoding is strict: invalid funct3/funct7 encodings become NOPs.
+- `SLTU` = `~carry` of `a + ~b + 1` (correct; covered by `tb_alu`/`tb_core`). MMIO byte/halfword accesses use the same byte lanes and sign extension as RAM.
+
+`tb_core` (system test) assembles its own program with `enc_*` functions and writes it into `dut.search_inst.instr_mem.mem` by hierarchy; add new instruction checks there.

@@ -1,3 +1,0 @@
-0000000A // Endereço 0x00 (Índice 0): Valor A = 10 (0x0A) 
-00000014 // Endereço 0x04 (Índice 1): Valor B = 20 (0x14) 
-00000000 // Endereço 0x08 (Índice 2): Inicializado em 0 (Receberá o resultado 30)
