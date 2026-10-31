@@ -100,18 +100,31 @@ module control_unit
 
         case (opcode)
             OPCODE_OP: begin
+                // Decodificacao estrita: apenas funct7 = 0000000 (todas as
+                // operacoes) ou 0100000 (SUB/SRA) sao validos no RV32I. Outros
+                // valores (ex.: extensao M, funct7 = 0000001) viram NOP.
                 register_file_written_enable_o = 1'b1;
-                case (funct3)
-                    F3_ADD: execution_alu_control_o = (funct7 == F7_SUB) ? OP_SUB : OP_ADD;
-                    F3_SLL: execution_alu_control_o = OP_SLL;
-                    F3_SLT: execution_alu_control_o = OP_SLT;
-                    F3_SLTU: execution_alu_control_o = OP_SLTU;
-                    F3_XOR: execution_alu_control_o = OP_XOR;
-                    F3_SRL: execution_alu_control_o = (funct7 == F7_SRA) ? OP_SRA : OP_SRL;
-                    F3_OR: execution_alu_control_o = OP_OR;
-                    F3_AND: execution_alu_control_o = OP_AND;
-                    default: register_file_written_enable_o = 1'b0;
-                endcase
+                if (funct7 == F7_ZERO) begin
+                    case (funct3)
+                        F3_ADD:  execution_alu_control_o = OP_ADD;
+                        F3_SLL:  execution_alu_control_o = OP_SLL;
+                        F3_SLT:  execution_alu_control_o = OP_SLT;
+                        F3_SLTU: execution_alu_control_o = OP_SLTU;
+                        F3_XOR:  execution_alu_control_o = OP_XOR;
+                        F3_SRL:  execution_alu_control_o = OP_SRL;
+                        F3_OR:   execution_alu_control_o = OP_OR;
+                        F3_AND:  execution_alu_control_o = OP_AND;
+                        default: register_file_written_enable_o = 1'b0;
+                    endcase
+                end else if (funct7 == F7_ALT) begin
+                    case (funct3)
+                        F3_SUB:  execution_alu_control_o = OP_SUB;
+                        F3_SRA:  execution_alu_control_o = OP_SRA;
+                        default: register_file_written_enable_o = 1'b0;
+                    endcase
+                end else begin
+                    register_file_written_enable_o = 1'b0;
+                end
             end
 
             OPCODE_OP_IMM: begin
@@ -124,8 +137,17 @@ module control_unit
                     F3_XORI: execution_alu_control_o = OP_XOR;
                     F3_ORI: execution_alu_control_o = OP_OR;
                     F3_ANDI: execution_alu_control_o = OP_AND;
-                    F3_SLLI: execution_alu_control_o = OP_SLL;
-                    F3_SRLI: execution_alu_control_o = (funct7 == F7_SRAI) ? OP_SRA : OP_SRL;
+                    // Shifts com imediato: imm[11:5] precisa ser 0000000
+                    // (SLLI/SRLI) ou 0100000 (SRAI); outros valores viram NOP.
+                    F3_SLLI: begin
+                        if (funct7 == F7_SLLI) execution_alu_control_o = OP_SLL;
+                        else                   register_file_written_enable_o = 1'b0;
+                    end
+                    F3_SRLI: begin
+                        if      (funct7 == F7_SRLI) execution_alu_control_o = OP_SRL;
+                        else if (funct7 == F7_SRAI) execution_alu_control_o = OP_SRA;
+                        else                        register_file_written_enable_o = 1'b0;
+                    end
                     default: register_file_written_enable_o = 1'b0;
                 endcase
             end
@@ -192,11 +214,14 @@ module control_unit
             end
 
             OPCODE_JALR: begin
-                execution_alu_control_o = OP_PASS_B;
-                execution_control_alu_b_o = 2'b10; // PC + 4 para write-back
-                execution_branch_enable_o = 1'b1;
-                execution_branch_control_o = OP_BIR;
-                register_file_written_enable_o = 1'b1;
+                // JALR so e valido com funct3 = 000; caso contrario vira NOP.
+                if (funct3 == F3_JALR) begin
+                    execution_alu_control_o = OP_PASS_B;
+                    execution_control_alu_b_o = 2'b10; // PC + 4 para write-back
+                    execution_branch_enable_o = 1'b1;
+                    execution_branch_control_o = OP_BIR;
+                    register_file_written_enable_o = 1'b1;
+                end
             end
 
             default: begin

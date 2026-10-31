@@ -80,11 +80,13 @@ module data_memory
     // LÓGICA DE LEITURA DA RAM INTERNA (Assíncrona)
     // =========================================================================
     logic [31:0] ram_word_data;
+    logic [31:0] io_data_out;   // palavra lida dos periféricos (definida abaixo)
+    logic [31:0] word_data;     // palavra selecionada: RAM ou MMIO
     logic [7:0]  byte_sel;
     logic [15:0] half_sel;
     logic        sign_b;
     logic        sign_h;
-    logic [31:0] ram_data_out;
+    logic [31:0] load_data;
 
     always_comb begin
         if (ram_addr_valid)
@@ -94,26 +96,30 @@ module data_memory
             ram_word_data = '0;
     end
 
+    // A selecao de byte/halfword e a extensao de sinal valem tanto para a RAM
+    // quanto para o MMIO (ex.: LBU no byte 1 das chaves retorna switch[15:8]).
+    assign word_data = is_io_space ? io_data_out : ram_word_data;
+
     always_comb begin
         case (byte_offset)
-            2'b00:  byte_sel = ram_word_data[7:0];
-            2'b01:  byte_sel = ram_word_data[15:8];
-            2'b10:  byte_sel = ram_word_data[23:16];
-            2'b11:  byte_sel = ram_word_data[31:24];
+            2'b00:  byte_sel = word_data[7:0];
+            2'b01:  byte_sel = word_data[15:8];
+            2'b10:  byte_sel = word_data[23:16];
+            2'b11:  byte_sel = word_data[31:24];
         endcase
     end
 
-    assign half_sel = byte_offset[1] ? ram_word_data[31:16] : ram_word_data[15:0];
+    assign half_sel = byte_offset[1] ? word_data[31:16] : word_data[15:0];
 
     assign sign_b = (mem_signed_i == MEM_SIGNED) & byte_sel[7];
     assign sign_h = (mem_signed_i == MEM_SIGNED) & half_sel[15];
 
     always_comb begin
         case (mem_width_i)
-            MEM_WIDTH_BYTE: ram_data_out = {{24{sign_b}}, byte_sel};
-            MEM_WIDTH_HALF: ram_data_out = {{16{sign_h}}, half_sel};
-            MEM_WIDTH_WORD: ram_data_out = ram_word_data;
-            default:        ram_data_out = ram_word_data;
+            MEM_WIDTH_BYTE: load_data = {{24{sign_b}}, byte_sel};
+            MEM_WIDTH_HALF: load_data = {{16{sign_h}}, half_sel};
+            MEM_WIDTH_WORD: load_data = word_data;
+            default:        load_data = word_data;
         endcase
     end
 
@@ -170,17 +176,23 @@ module data_memory
         pmod_col_o = '0;
     end
 
+    // Escrita por faixa de bytes (mesmos we_byte/wdata da RAM): SB/SH alteram
+    // apenas os bytes enderecados; SW se comporta como antes.
     always_ff @(posedge clk) begin
-        if (io_write_leds)  led_o      <= data_i[15:0];
-        if (io_write_seg7)  seg7_o     <= data_i[15:0];
-        if (io_write_pmod)  pmod_col_o <= data_i[3:0];
+        if (io_write_leds) begin
+            if (we_byte[0]) led_o[7:0]   <= wdata[7:0];
+            if (we_byte[1]) led_o[15:8]  <= wdata[15:8];
+        end
+        if (io_write_seg7) begin
+            if (we_byte[0]) seg7_o[7:0]  <= wdata[7:0];
+            if (we_byte[1]) seg7_o[15:8] <= wdata[15:8];
+        end
+        if (io_write_pmod && we_byte[0]) pmod_col_o <= wdata[3:0];
     end
 
     // =========================================================================
     // LEITURA DOS PERIFÉRICOS (Mapeamento de Entrada / Estado)
     // =========================================================================
-    logic [31:0] io_data_out;
-
     always_comb begin
         case (io_offset)
             4'h0:    io_data_out = {16'h0, led_o};       // Lê estado atual dos LEDs
@@ -195,6 +207,6 @@ module data_memory
     // =========================================================================
     // MULTIPLEXADOR DE SAÍDA FINAL (Caminho Crítico Otimizado)
     // =========================================================================
-    assign data_o = is_io_space ? io_data_out : ram_data_out;
+    assign data_o = load_data;
 
 endmodule

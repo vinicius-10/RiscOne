@@ -57,6 +57,12 @@ module register_file #(
 
     logic [XLEN-1:0] register_file [1:31];
 
+    // Valor inicial zero: evita leituras 'X' na simulacao e vira valor de
+    // inicializacao da LUTRAM/FFs na FPGA. Nao e um reset (o reset so zera o PC).
+    initial begin
+        for (int i = 1; i < 32; i++) register_file[i] = '0;
+    end
+
     always_ff @(posedge clk) begin
         if (written_enable_i && (written_add_i != 5'd0)) begin
             register_file[written_add_i] <= written_data_i;

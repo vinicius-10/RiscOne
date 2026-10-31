@@ -28,9 +28,9 @@
  *
  * Seleciona os operandos da ALU, executa a operacao indicada e calcula em
  * paralelo o endereco de destino de desvio. Para desvios condicionais, a
- * decisao usa `zero`, que nesta implementacao reflete o bit menos significativo
- * do resultado da ALU: OP_BCT aceita quando `zero` vale 1 e OP_BCF aceita
- * quando `zero` vale 0. OP_BIP e OP_BIR sao desvios incondicionais relativos ao
+ * decisao usa `alu_lsb`, que nesta implementacao reflete o bit menos significativo
+ * do resultado da ALU: OP_BCT aceita quando `alu_lsb` vale 1 e OP_BCF aceita
+ * quando `alu_lsb` vale 0. OP_BIP e OP_BIR sao desvios incondicionais relativos ao
  * PC e a rs1, respectivamente.
  *
  * @param XLEN Largura dos dados e enderecos. Valor padrao: 32 bits.
@@ -75,7 +75,7 @@ module execution
     logic [XLEN-1:0] alu_a;
     logic [XLEN-1:0] alu_b;
     logic [XLEN-1:0] alu_result;
-    logic            zero;
+    logic            alu_lsb;
 
     logic [XLEN-1:0] branch_address;
     logic            branch_taken;
@@ -108,7 +108,7 @@ module execution
         .b_i     (alu_b),
         .alu_op_i(alu_control_i),
         .alu_o   (alu_result),
-        .zero_o  (zero)
+        .alu_lsb_o(alu_lsb)
     );
 
     // Escolhe a condicao do desvio e a base do endereco de destino.
@@ -116,11 +116,11 @@ module execution
         if (branch_enable_i) begin
             case (branch_control_i)
                 OP_BCT: begin
-                    branch_taken = zero;
+                    branch_taken = alu_lsb;
                     branch_b     = pc_i;
                 end
                 OP_BCF: begin
-                    branch_taken = ~zero;
+                    branch_taken = ~alu_lsb;
                     branch_b     = pc_i;
                 end
                 OP_BIP: begin
