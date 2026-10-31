@@ -151,6 +151,10 @@ docs/
 ├── ESPEC_RV32I.md       # spec RV32I alinhada ao RTL (controle, interfaces, ligações)
 └── DOCUMENTACAO_PROJETO.md # requisitos, decisões, validação e questões em aberto
 scripts/run_tb.ps1       # roda os testbenches no xsim
+scripts/build_sw.ps1     # compila sw/apps/<app> com riscv-gcc -> program_bytes.mem / data.mem
+sw/
+├── common/             # crt0.S, link.ld, mmio.h, libc_min.c
+└── apps/               # selftest (autoteste em C, roda no tb_program), leds (demo da placa)
 processador_riscV.srcs/
 ├── sources_1/new/       # RTL SystemVerilog e packages
 ├── sources_1/imports/new/ # cópias importadas das imagens de memória
@@ -167,7 +171,7 @@ processador_riscV.ip_user_files/ # arquivos auxiliares de IP/Vivado
 
 Arquivos RTL principais em `sources_1/new/`: `top_core.sv`, `core.sv`, `search.sv`, `instruction_memory.sv`, `decoder.sv`, `control_unit.sv`, `register_file.sv`, `imm_gen.sv`, `execution.sv`, `alu.sv`, `data_memory.sv`, `write_back.sv` e packages `alu_pkg.sv`, `branch_pkg.sv`, `func3_pkg.sv`, `func7_pkg.sv`, `mem_pkg.sv`, `opcode_pkg.sv`.
 
-Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_alu.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`; em `sim_1/imports/new/`: `tb_control_unit.sv`, `tb_write_back.sv`.
+Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_program.sv` (programa C compilado), `tb_alu.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`; em `sim_1/imports/new/`: `tb_control_unit.sv`, `tb_write_back.sv`.
 
 ## 6. Convenções observadas no código
 

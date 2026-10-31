@@ -52,6 +52,16 @@ $Tests = [ordered]@{
     tb_instruction_fetch = Src $Sim   tb_instruction_fetch @('search')
     tb_register_file     = Src $Sim   tb_register_file     @('register_file')
     tb_write_back        = Src $SimIm tb_write_back        @('write_back')
+    # Programa C (sw/apps/selftest) compilado com riscv-gcc e executado no core.
+    tb_program           = Src $Sim   tb_program           @('alu', 'control_unit', 'imm_gen', 'register_file',
+                                                             'decoder', 'execution', 'instruction_memory',
+                                                             'search', 'data_memory', 'write_back', 'core')
+}
+
+# Testbenches que usam um programa compilado (scripts/build_sw.ps1) em vez dos
+# .mem de sources_1/imports/new. O programa e recompilado antes de simular.
+$Programs = @{
+    tb_program = 'selftest'
 }
 
 if ($List) { $Tests.Keys; exit 0 }
@@ -89,23 +99,36 @@ foreach ($tb in $Testbench) {
     $dir = Join-Path $Build $tb
     New-Item -ItemType Directory -Force $dir | Out-Null
     Get-ChildItem $dir -Force | Remove-Item -Recurse -Force
-    # $readmemh resolve caminhos relativos ao diretorio de execucao.
-    Copy-Item (Join-Path $MemDir '*.mem') $dir
-
     Write-Host -NoNewline ("{0,-22} " -f $tb)
-    $status = 'PASS'; $detail = ''
+    $status = 'PASS'; $detail = ''; $r = $null
 
-    $r = Invoke-Tool 'xvlog' (@('--sv', '--relax') + $Pkgs + $Tests[$tb]) $dir 'compile'
-    if (-not $r.Ok) { $status = 'COMPILE'; $detail = $r }
-    else {
-        $r = Invoke-Tool 'xelab' @('--relax', '--debug', 'typical', $tb, '-s', "${tb}_sim") $dir 'elaborate'
-        if (-not $r.Ok) { $status = 'ELAB'; $detail = $r }
+    # $readmemh resolve caminhos relativos ao diretorio de execucao.
+    if ($Programs.Contains($tb)) {
+        $app = $Programs[$tb]
+        $log = Join-Path $dir 'build_sw.txt'
+        & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'build_sw.ps1') $app *> $log
+        if ($LASTEXITCODE -ne 0) {
+            $status = 'BUILD'; $detail = @{ Text = (Get-Content $log -Raw); Log = $log }
+        } else {
+            Copy-Item (Join-Path $Root "build\sw\$app\*.mem") $dir
+        }
+    } else {
+        Copy-Item (Join-Path $MemDir '*.mem') $dir
+    }
+
+    if ($status -eq 'PASS') {
+        $r = Invoke-Tool 'xvlog' (@('--sv', '--relax') + $Pkgs + $Tests[$tb]) $dir 'compile'
+        if (-not $r.Ok) { $status = 'COMPILE'; $detail = $r }
         else {
-            $r = Invoke-Tool 'xsim' @("${tb}_sim", '-R') $dir 'simulate'
-            $passed = $r.Text -match 'PASSOU|STATUS: SUCCESS'
-            $failed = $r.Text -match 'FALHOU|STATUS: FAILED|\[FAIL\]|\[ERRO'
-            if (-not $r.Ok)                   { $status = 'SIM'; $detail = $r }
-            elseif ($failed -or -not $passed) { $status = 'FAIL'; $detail = $r }
+            $r = Invoke-Tool 'xelab' @('--relax', '--debug', 'typical', $tb, '-s', "${tb}_sim") $dir 'elaborate'
+            if (-not $r.Ok) { $status = 'ELAB'; $detail = $r }
+            else {
+                $r = Invoke-Tool 'xsim' @("${tb}_sim", '-R') $dir 'simulate'
+                $passed = $r.Text -match 'PASSOU|STATUS: SUCCESS'
+                $failed = $r.Text -match 'FALHOU|STATUS: FAILED|\[FAIL\]|\[ERRO'
+                if (-not $r.Ok)                   { $status = 'SIM'; $detail = $r }
+                elseif ($failed -or -not $passed) { $status = 'FAIL'; $detail = $r }
+            }
         }
     }
 

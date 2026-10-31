@@ -46,6 +46,21 @@ $S = "D:\valuc\vivado\projects\processador_riscV\processador_riscV.srcs"
 
 Synthesis/implementation/bitstream are done through Vivado (GUI or `vivado -mode batch` with a Tcl script opening `processador_riscV.xpr`); there is no checked-in build script.
 
+## Software (riscv-gcc)
+
+Toolchain: xPack `riscv-none-elf-gcc` 15.2.0 at `D:\ProgramFiles\xpack-riscv-none-elf-gcc-15.2.0-1\bin` (not on PATH; override with `-GccBin` or `$env:RISCV_GCC_BIN`). Programs live in `sw/apps/<name>/` (`selftest` = C self-check for simulation, `leds` = board demo); shared startup/linker/MMIO in `sw/common/`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 selftest           # -> build/sw/selftest/{program_bytes,data}.mem, .elf, .lst, .map
+powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 leds -Install      # also copies the .mem files to sources_1/imports/new (backs up the old ones)
+```
+
+- Harvard: IMEM and DMEM both start at 0. `.rodata` (constants, switch tables, function-pointer tables) must live in DMEM because loads can't read IMEM — `link.ld` does this and links with `--no-check-sections`. 4 KiB each (MEM_DEPTH = 1024); stack at the top of DMEM.
+- Flags: `-march=rv32i -mabi=ilp32 -msmall-data-limit=0 -ffreestanding -nostdlib` + `-lgcc` (mul/div come from libgcc). `sw/common/libc_min.c` supplies memcpy/memset/memmove/memcmp.
+- `crt0.S` sets sp, zeroes `.bss`, calls `main`, leaves its return in `a0` and spins in `_halt` (`j .` = `0x0000006F`). `.data` is only loaded with the FPGA bitstream — a CPU reset does not restore it.
+- `data.mem` = bytes in address order (byte at address 0 first), matching `data_memory`'s `{mem[w][3],…,mem[w][0]}` little-endian word.
+- `tb_program` (in `run_tb.ps1`) rebuilds `selftest`, runs it on `core` until `_halt`, and passes if `main` returned 0 (else `a0` = failing test group, LEDs = `0xE000|group`). Add C checks to `sw/apps/selftest/main.c`; keep inputs `volatile` or GCC folds them at compile time.
+
 ## Architecture
 
 ```text
