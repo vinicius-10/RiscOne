@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Single-cycle RISC-V RV32I processor in SystemVerilog, built as a Vivado 2025.2 project (`processador_riscV.xpr`) for the Digilent Nexys A7-100T (`xc7a100tcsg324-1`). Synthesis top: `top_core`. Comments, headers and docs are in Portuguese (identifiers in English) — keep new comments in Portuguese and follow the existing header/Doxygen-style block (`@brief`, `@param`) used in every `.sv` file.
 
-`README.md` (summary) and `DOCUMENTACAO_PROJETO.md` (spec + open questions) describe the design in detail. The RTL is the source of truth; those docs explicitly flag where comments and code disagree.
+`README.md` (summary) and `docs/DOCUMENTACAO_PROJETO.md` (requirements, decisions, validation, open questions) describe the design. `docs/ESPEC_RV32I.md` is the RV32I spec aligned to the RTL (encodings, immediates, control signals, module interfaces, `core` wiring, MMIO) — keep it in sync when changing the RTL. `docs/intruçoes.xlsx` is the user's own working sheet (instruction fields, opcode map, funct3/funct7); everything relevant is already in ESPEC, so use ESPEC instead of parsing the xlsx. If asked to edit it: never save it with openpyxl (it drops the sheet's x14 data-validation dropdowns); edit `xl/worksheets/sheet1.xml` inside the zip directly, and only when Excel has it closed (a `~$` lock file means it is open). The RTL is the source of truth; those docs explicitly flag where comments and code disagree.
 
 ## Do not edit `processador_riscV.xpr`
 
@@ -49,8 +49,8 @@ Synthesis/implementation/bitstream are done through Vivado (GUI or `vivado -mode
 ## Architecture
 
 ```text
-top_core          board pins -> core (inverts active-low CPU_RESETN)
-└── core          wires the single-cycle datapath; params XLEN, MEM_DEPTH, *_MEM_FILE
+top_core          board pins -> core (CPU_RESETN passes through unchanged)
+└── core          wires the datapath; inverts active-low CPU_RESETN; params XLEN, MEM_DEPTH, *_MEM_FILE
     ├── search ── instruction_memory   PC register, PC+4 vs branch target mux
     ├── decoder   register_file + imm_gen + control_unit
     ├── execution ── alu               operand muxes, branch decision + target
@@ -61,11 +61,11 @@ top_core          board pins -> core (inverts active-low CPU_RESETN)
 - Only the PC, register-file writes, RAM writes and MMIO output registers are clocked (`posedge clk`); everything else is combinational. Reset is synchronous active-high and clears **only the PC** — registers and RAM are not reset.
 - Control encodings are enums in the packages (`opcode_pkg`, `func3_pkg`, `func7_pkg`, `alu_pkg` → `alu_op_t`, `branch_pkg` → `branch_op_t`, `mem_pkg` → `mem_width_t`/`mem_signed_t`). `control_unit` maps opcode/funct3/funct7 to these; unsupported opcodes get safe defaults (no reg/mem write, PC keeps advancing) with no trap.
 - MMIO lives inside `data_memory`: selected when `addr[31:28] == 4'h4`, register chosen by `addr[5:2]` — LEDs `0x4000_0000`, switches `0x4000_0004`, buttons `0x4000_0008`, 7-seg display `0x4000_000C`, PMOD rows/cols `0x4000_0010`. RAM occupies `0 .. MEM_DEPTH*4-1`.
-- **Branch convention:** `alu.zero_o` is `alu_o[0]`, not a NOR of the result. Branches use `OP_CMP` (equality) for BEQ/BNE and SLT/SLTU for relational branches, so the branch decision relies on the LSB of a 0/1 comparison result. Preserve this if you change ALU op encodings.
+- **Branch convention:** `alu.alu_lsb_o` is `alu_o[0]` (bit 0 of the result, not a zero flag). Branches use `OP_CMP` (equality) for BEQ/BNE and SLT/SLTU for relational branches, so the branch decision relies on the LSB of a 0/1 comparison result. Preserve this if you change ALU op encodings.
 
 Naming: ports use `_i`/`_o` suffixes; signals are prefixed with the owning block (e.g. `execution_alu_control_o`).
 
-## Known inconsistencies (see `DOCUMENTACAO_PROJETO.md` §8)
+## Known inconsistencies (see `docs/DOCUMENTACAO_PROJETO.md` §8)
 
 - `execution` clears only bit 0 of jump/branch targets (as the ISA requires for JALR); misaligned targets don't trap.
 - Misaligned halfword/word data accesses aren't supported and don't trap.

@@ -40,7 +40,7 @@
  * @param b_i Operando B de entrada.
  * @param alu_op_i C?digo da opera??o a ser executada.
  * @retval alu_o Resultado da opera??o selecionada.
- * @retval zero_o Sinal de indica??o de resultado nulo ou igualdade, com base no bit menos significativo do resultado.
+ * @retval alu_lsb_o Bit 0 (LSB) do resultado `alu_o`. Em CMP/SLT/SLTU o resultado e 0 ou 1, entao este bit e a condicao usada pelos branches.
  */
 module alu import alu_pkg::*; #(
     parameter int XLEN = 32
@@ -49,7 +49,7 @@ module alu import alu_pkg::*; #(
     input  logic [XLEN-1:0] b_i,
     input  alu_op_t         alu_op_i,
     output logic [XLEN-1:0] alu_o,
-    output logic            zero_o
+    output logic            alu_lsb_o
 );
 
 
@@ -124,9 +124,9 @@ module alu import alu_pkg::*; #(
     end
 
     // --------------------------------------------------------
-    // Nova Flag: reflete o LSB (Bit 0) da sa?da
+    // Flag alu_lsb_o: reflete o LSB (Bit 0) da sa?da
     // --------------------------------------------------------
-    assign zero_o = alu_o[0];
+    assign alu_lsb_o = alu_o[0];
 
 endmodule
 

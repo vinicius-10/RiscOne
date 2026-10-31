@@ -34,6 +34,8 @@ xsim.dir/
 .vscode/
 Thumbs.db
 desktop.ini
+# Arquivos de lock do Office (Excel/Word abertos)
+~$*
 
 # Saida do scripts/run_tb.ps1
 build/

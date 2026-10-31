@@ -1,0 +1,222 @@
+# Especificação RV32I monociclo — conforme o RTL
+
+Versão alinhada ao RTL de `processador_riscV.srcs/sources_1/new/` (fonte da verdade).
+Baseada na spec original do usuário (`especifica_o_t_cnica_definitiva_rv32i.md`), com
+reset, controle, nomes de módulos e flags ajustados para o que o RTL implementa.
+Se o RTL mudar, atualize este arquivo junto.
+
+## 1. Escopo
+
+- RV32I, 32 bits, endereçamento por byte, little-endian.
+- **37 instruções** implementadas. `ECALL`, `EBREAK` e `FENCE` são NOP (sem CSRs, sem traps).
+  Codificações inválidas de funct3/funct7 também viram NOP (sem escrita, PC avança).
+- 32 registradores de 32 bits; `x0` sempre lê 0 e escritas nele são ignoradas.
+- PC avança +4. Busca de instrução alinhada em palavra. Dados: byte/half/word alinhados
+  (acesso desalinhado não é suportado e não gera trap).
+- ABI: `ra`=x1, `sp`=x2, `gp`=x3, `tp`=x4, `t0-2`=x5-7, `s0/fp`=x8, `s1`=x9,
+  `a0-1`=x10-11, `a2-7`=x12-17, `s2-11`=x18-27, `t3-6`=x28-31.
+
+## 2. Clock e reset
+
+- Um único clock `clk`, borda de subida.
+- Elementos sequenciais: PC (`search`), escrita no `register_file`, escrita na RAM e
+  registradores de saída MMIO (`data_memory`). Todo o resto é combinacional.
+- Pino da placa `CPU_RESETN` (ativo em nível **baixo**) entra em `top_core` e é repassado
+  sem alteração para `core`. **O `core` inverte** (`reset_i = ~CPU_RESETN`) e entrega um
+  reset **síncrono ativo em nível alto** ao `search` (porta `rest_i`).
+- O reset **zera somente o PC**. Registradores, RAM e saídas MMIO não são resetados; eles
+  partem dos valores de `initial` (zeros / arquivos `.mem`), que valem só na carga do FPGA.
+
+## 3. Codificação (opcode / funct3 / funct7)
+
+| Grupo | opcode (`opcode_pkg`) | Instruções (funct3) | funct7 |
+| :-- | :-- | :-- | :-- |
+| R | `0110011` `OPCODE_OP` | ADD/SUB 000, SLL 001, SLT 010, SLTU 011, XOR 100, SRL/SRA 101, OR 110, AND 111 | `0000000`; SUB/SRA `0100000` |
+| I-ALU | `0010011` `OPCODE_OP_IMM` | ADDI 000, SLTI 010, SLTIU 011, XORI 100, ORI 110, ANDI 111, SLLI 001, SRLI/SRAI 101 | só shifts: `0000000`; SRAI `0100000` |
+| Load | `0000011` `OPCODE_LOAD` | LB 000, LH 001, LW 010, LBU 100, LHU 101 | — |
+| Store | `0100011` `OPCODE_STORE` | SB 000, SH 001, SW 010 | — |
+| Branch | `1100011` `OPCODE_BRANCH` | BEQ 000, BNE 001, BLT 100, BGE 101, BLTU 110, BGEU 111 | — |
+| JAL | `1101111` `OPCODE_JAL` | — | — |
+| JALR | `1100111` `OPCODE_JALR` | 000 | — |
+| LUI | `0110111` `OPCODE_LUI` | — | — |
+| AUIPC | `0010111` `OPCODE_AUIPC` | — | — |
+| (NOP) | `0001111` `OPCODE_MISC_MEM`, `1110011` `OPCODE_SYSTEM` | FENCE, ECALL, EBREAK | — |
+
+Semântica: JAL/JALR escrevem `PC+4` em rd; alvo de JAL = `PC + imm`; alvo de JALR =
+`(rs1 + imm) & ~1`; shifts usam `B[4:0]`; LUI `rd = imm` (imm já é `imm20<<12`);
+AUIPC `rd = PC + imm`.
+
+## 4. Imediatos (`imm_gen`, por opcode)
+
+- I (LOAD, OP_IMM, JALR e default): `{{20{i[31]}}, i[31:20]}`
+- S (STORE): `{{20{i[31]}}, i[31:25], i[11:7]}`
+- B (BRANCH): `{{19{i[31]}}, i[31], i[7], i[30:25], i[11:8], 1'b0}`
+- U (LUI, AUIPC): `{i[31:12], 12'b0}`
+- J (JAL): `{{11{i[31]}}, i[31], i[19:12], i[20], i[30:21], 1'b0}`
+
+## 5. Controle (`control_unit`)
+
+Não existe ALUOp de 2 bits nem um "ALU Control" separado: o `control_unit` decodifica
+opcode/funct3/funct7 e gera direto todos os sinais abaixo.
+
+### 5.1 Sinais
+
+| Saída do `control_unit` | Tipo | Destino | Significado |
+| :-- | :-- | :-- | :-- |
+| `execution_alu_control_o` | `alu_op_t` | ALU | operação da ALU |
+| `execution_control_alu_a_o` | 1 bit | execution | operando A: 0 = rs1, 1 = PC |
+| `execution_control_alu_b_o` | 2 bits | execution | operando B: 00 = rs2, 01 = imm, 10 = PC+4 |
+| `execution_branch_enable_o` | 1 bit | execution | instrução pode desviar o PC |
+| `execution_branch_control_o` | `branch_op_t` | execution | tipo de desvio (abaixo) |
+| `search_pc_write_o` | 1 bit | search | habilita atualizar PC (hoje sempre 1) |
+| `data_memory_mem_write_o` | 1 bit | data_memory | escrita na memória (store) |
+| `data_memory_mem_width_o` | `mem_width_t` | data_memory | BYTE `00`, HALF `01`, WORD `10` |
+| `data_memory_mem_signed_o` | `mem_signed_t` | data_memory | UNSIGNED `0`, SIGNED `1` (loads) |
+| `register_file_written_enable_o` | 1 bit | register_file | escreve rd |
+| `write_back_mem_to_reg_o` | 1 bit | write_back | 0 = resultado ALU, 1 = dado da memória |
+
+Não há `mem_read`: a leitura da `data_memory` é sempre combinacional e só é usada quando
+`mem_to_reg = 1`.
+
+Padrões (opcode desconhecido / NOP): ALU `OP_ADD`, A = rs1, B = rs2, sem desvio
+(`OP_BCT`, enable 0), PC write 1, sem escrita em memória/registrador, WORD/UNSIGNED, ALU no WB.
+
+### 5.2 `branch_op_t` (`branch_pkg`)
+
+| Código | Nome | Desvia quando | Alvo |
+| :-- | :-- | :-- | :-- |
+| `00` | `OP_BCT` | `alu_lsb_o == 1` | `(PC + imm) & ~1` |
+| `01` | `OP_BCF` | `alu_lsb_o == 0` | `(PC + imm) & ~1` |
+| `10` | `OP_BIP` | sempre (JAL) | `(PC + imm) & ~1` |
+| `11` | `OP_BIR` | sempre (JALR) | `(rs1 + imm) & ~1` |
+
+### 5.3 Matriz por grupo
+
+| Grupo | RegWr | A | B | MemWr | width / signed | MemToReg | `alu_op_t` | Branch en / op |
+| :-- | :-: | :-: | :-: | :-: | :-- | :-: | :-- | :-- |
+| R | 1 | rs1 | rs2 | 0 | — | 0 | conforme funct3/funct7 | 0 |
+| I-ALU | 1 | rs1 | imm | 0 | — | 0 | conforme funct3 (shifts checam funct7) | 0 |
+| Load | 1 | rs1 | imm | 0 | LB B/S, LH H/S, LW W, LBU B/U, LHU H/U | 1 | `OP_ADD` | 0 |
+| Store | 0 | rs1 | imm | 1 | SB B, SH H, SW W | — | `OP_ADD` | 0 |
+| BEQ / BNE | 0 | rs1 | rs2 | 0 | — | — | `OP_CMP` | 1 / BCT, BCF |
+| BLT / BGE | 0 | rs1 | rs2 | 0 | — | — | `OP_SLT` | 1 / BCT, BCF |
+| BLTU / BGEU | 0 | rs1 | rs2 | 0 | — | — | `OP_SLTU` | 1 / BCT, BCF |
+| JAL | 1 | rs1 (ignorado) | PC+4 | 0 | — | 0 | `OP_PASS_B` | 1 / BIP |
+| JALR | 1 | rs1 (ignorado) | PC+4 | 0 | — | 0 | `OP_PASS_B` | 1 / BIR |
+| LUI | 1 | rs1 (ignorado) | imm | 0 | — | 0 | `OP_PASS_B` | 0 |
+| AUIPC | 1 | PC | imm | 0 | — | 0 | `OP_ADD` | 0 |
+
+JAL/JALR gravam `PC+4` passando-o pela ALU (`OP_PASS_B` com B = PC+4); o alvo do salto é
+calculado num somador separado dentro do `execution`.
+
+## 6. ALU (`alu`, `alu_pkg::alu_op_t`)
+
+| Código | Op | Resultado |
+| :-- | :-- | :-- |
+| `0000` | `OP_ADD` | A + B |
+| `0001` | `OP_SUB` | A − B |
+| `0010` | `OP_AND` | A & B |
+| `0011` | `OP_OR` | A \| B |
+| `0100` | `OP_XOR` | A ^ B |
+| `0101` | `OP_SLL` | A << B[4:0] |
+| `0110` | `OP_SRL` | A >> B[4:0] |
+| `0111` | `OP_SRA` | $signed(A) >>> B[4:0] |
+| `1000` | `OP_SLT` | 1 se A < B (com sinal), senão 0 |
+| `1001` | `OP_SLTU` | 1 se A < B (sem sinal) = `~carry` de A + ~B + 1 |
+| `1010` | `OP_PASS_B` | B |
+| `1011` | `OP_CMP` | 1 se A == B, senão 0 |
+
+Saídas: `alu_o` (resultado de 32 bits) e **`alu_lsb_o = alu_o[0]`** (bit 0 do resultado).
+Não é uma flag de "resultado zero". Como CMP/SLT/SLTU devolvem 0 ou 1, esse bit é a
+condição do branch. Ao mudar a ALU, mantenha CMP/SLT/SLTU retornando exatamente 0/1.
+
+## 7. Hierarquia e interfaces dos módulos
+
+```text
+top_core          pinos da placa -> core
+└── core          interliga o datapath; inverte CPU_RESETN; params XLEN, MEM_DEPTH, INSTR_MEM_FILE, DATA_MEM_FILE
+    ├── search            PC + mux PC+4 / alvo de desvio
+    │   └── instruction_memory
+    ├── decoder           separa rd/rs1/rs2 da instrução
+    │   ├── register_file
+    │   ├── imm_gen
+    │   └── control_unit
+    ├── execution         muxes A/B, decisão e alvo de desvio
+    │   └── alu
+    ├── data_memory       RAM byte-endereçável + periféricos MMIO
+    └── write_back        mux ALU / memória
+```
+
+Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco de destino.
+
+| Módulo | Entradas | Saídas | Comportamento |
+| :-- | :-- | :-- | :-- |
+| `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `button = {BTND,BTNR,BTNL,BTNU,BTNC}`; `seg7[7:0]` → cátodos, `seg7[15:8]` → ânodos |
+| `search` | `clk`, `rest_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; na borda: `rest_i` → PC=0, senão se `pc_write_i`: PC = `pc_branch_i ? new_pc_i : pc_next` |
+| `instruction_memory` | `addr_i` | `instr_o` | ROM de palavras, leitura combinacional por `addr_i[..:2]`, carregada de `MEM_FILE` |
+| `decoder` | `clk`, `instruction_i`, `written_data_i` | `rs1_o`, `rs2_o`, `imm_o` + todas as saídas do `control_unit` | rd=`[11:7]`, rs1=`[19:15]`, rs2=`[24:20]` |
+| `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
+| `imm_gen` | `instruction_i` | `imm_o` | §4 |
+| `control_unit` | `instruction_i` | §5.1 | §5 |
+| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o` | §5.2; `pc_branch_o = (imm + base) & ~1` |
+| `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o`, `alu_lsb_o` | §6 |
+| `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `data_i`, `switch_i`, `button_i`, `pmod_row_i` | `data_o`, `led_o`, `seg7_o`, `pmod_col_o` | §9 |
+| `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
+
+## 8. Ligações entre os blocos (`core`)
+
+| Sinal no `core` | Origem | Destino(s) |
+| :-- | :-- | :-- |
+| `reset_i` (`~CPU_RESETN`) | core | `search.rest_i` |
+| `instruction` | `search.instr_o` | `decoder.instruction_i` |
+| `pc` | `search.pc_o` | `execution.pc_i` |
+| `pc_next` (PC+4) | `search.pc_next` | `execution.pc_next_i` |
+| `rs1_data` | `decoder.rs1_o` | `execution.reg_data1_i` |
+| `rs2_data` | `decoder.rs2_o` | `execution.reg_data2_i`, `data_memory.data_i` (dado do store) |
+| `immediate` | `decoder.imm_o` | `execution.imm_i` |
+| `alu_control` | `decoder.execution_alu_control_o` | `execution.alu_control_i` |
+| `alu_a_select` / `alu_b_select` | `decoder.execution_control_alu_a_o` / `_b_o` | `execution.control_alu_a` / `control_alu_b` |
+| `branch_enable` / `branch_control` | `decoder.execution_branch_enable_o` / `_control_o` | `execution.branch_enable_i` / `branch_control_i` |
+| `pc_write_enable` | `decoder.search_pc_write_o` | `search.pc_write_i` |
+| `branch_taken` | `execution.branch_taken_o` | `search.pc_branch_i` |
+| `pc_branch` | `execution.pc_branch_o` | `search.new_pc_i` |
+| `alu_result` | `execution.alu_result_o` | `data_memory.addr_i`, `write_back.alu_result_i` |
+| `data_memory_write_enable`, `_width`, `_signed` | `decoder.data_memory_mem_*_o` | `data_memory.mem_write_i`, `mem_width_i`, `mem_signed_i` |
+| `data_memory_data` | `data_memory.data_o` | `write_back.mem_data_i` |
+| `mem_to_reg` | `decoder.write_back_mem_to_reg_o` | `write_back.mem_to_reg_i` |
+| `write_back_data` | `write_back.wb_data_o` | `decoder.written_data_i` → `register_file` |
+| `register_write_enable` | `decoder.register_file_written_enable_o` | `register_file.written_enable_i` (interno ao decoder) |
+| `switch_i`, `button_i`, `pmod_row_i` / `led_o`, `seg7_o`, `pmod_col_o` | pinos via `top_core` | `data_memory` (MMIO) |
+
+Fluxo de um ciclo:
+
+```text
+PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► execution(ALU) ─► alu_result ─┬─► data_memory ─┐
+ ▲                                    └─ controle ────►                              │                 ▼
+ │                                                                                    └──────────► write_back ─► register_file (borda)
+ └─ search: PC = branch_taken ? pc_branch : PC+4 (borda) ◄── execution
+```
+
+## 9. Memória de dados e MMIO (`data_memory`)
+
+- RAM: `MEM_DEPTH` palavras × 4 bytes (`0 .. MEM_DEPTH*4-1`), carregada de `DATA_MEM_FILE`
+  (um byte por token hex). Leitura combinacional; escrita na borda com byte-enable
+  (SB: `0001 << addr[1:0]`; SH: `0011`/`1100` por `addr[1]`; SW: `1111`).
+- Loads: escolhe byte por `addr[1:0]` ou half por `addr[1]` e estende conforme `mem_signed_i`.
+- Endereço fora da RAM (e fora do MMIO) lê 0 e ignora escrita.
+- MMIO: `addr[31:28] == 4'h4`, registrador escolhido por `addr[5:2]`. Mesmas lanes de byte e
+  extensão de sinal da RAM.
+
+| Endereço | Registrador | Acesso |
+| :-- | :-- | :-- |
+| `0x4000_0000` | LEDs `led_o[15:0]` | L/E |
+| `0x4000_0004` | chaves `switch_i[15:0]` | L |
+| `0x4000_0008` | botões `button_i[4:0]` | L |
+| `0x4000_000C` | display 7 seg `seg7_o[15:0]` | L/E |
+| `0x4000_0010` | PMOD: lê linhas `pmod_row_i[3:0]`, escreve colunas `pmod_col_o[3:0]` | L/E |
+
+## 10. Limitações conhecidas
+
+- Só o bit 0 do alvo de JAL/JALR/branch é zerado; alvo desalinhado em palavra não gera trap.
+- Acessos half/word desalinhados não são suportados e não geram trap.
+- Sem CSRs, interrupções ou traps.

@@ -126,20 +126,7 @@ Nos branches, a condição é `alu_o[0]`: `OP_BCT` desvia quando é 1 e `OP_BCF`
 
 ### 3.3 Tabela de controle (`control_unit`)
 
-| Opcode | `alu_op` | `alu_a` | `alu_b` | `branch_en` / `branch_op` | `reg_write` | `mem_write` | `mem_to_reg` | `mem_width` / `mem_signed` |
-|---|---|---|---|---|---|---|---|---|
-| `OP` 0x33 | por funct3/funct7 | 0 (rs1) | 00 (rs2) | 0 / — | 1* | 0 | 0 | — |
-| `OP_IMM` 0x13 | por funct3/imm[11:5] | 0 (rs1) | 01 (imm) | 0 / — | 1* | 0 | 0 | — |
-| `LOAD` 0x03 | ADD | 0 | 01 | 0 / — | 1* | 0 | 1 | B/H/W, com/sem sinal por funct3 |
-| `STORE` 0x23 | ADD | 0 | 01 | 0 / — | 0 | 1* | — | B/H/W por funct3 |
-| `BRANCH` 0x63 | CMP/SLT/SLTU | 0 | 00 | 1* / BCT ou BCF | 0 | 0 | — | — |
-| `LUI` 0x37 | PASS_B | — | 01 | 0 / — | 1 | 0 | 0 | — |
-| `AUIPC` 0x17 | ADD | 1 (PC) | 01 | 0 / — | 1 | 0 | 0 | — |
-| `JAL` 0x6F | PASS_B | — | 10 (PC+4) | 1 / BIP | 1 | 0 | 0 | — |
-| `JALR` 0x67 | PASS_B | — | 10 (PC+4) | 1* / BIR | 1* | 0 | 0 | — |
-| outros | ADD | 0 | 00 | 0 | 0 | 0 | 0 | W / sem sinal |
-
-\* Desativado (vira NOP) quando funct3/funct7 não correspondem a uma instrução RV32I válida.
+A matriz completa de sinais por instrução, os códigos de `alu_op_t`/`branch_op_t`, as interfaces dos módulos e as ligações do `core` estão em [ESPEC_RV32I.md](ESPEC_RV32I.md) (§5 a §8). Este arquivo não repete essas tabelas.
 
 ## 4. Decisões refletidas no código
 
@@ -159,9 +146,11 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 ```text
 processador_riscV.xpr
 README.md
-DOCUMENTACAO_PROJETO.md
-control_unit.tex
-Texto_colado_corrigido.tex
+CLAUDE.md                # guia para o Claude Code
+docs/
+├── ESPEC_RV32I.md       # spec RV32I alinhada ao RTL (controle, interfaces, ligações)
+└── DOCUMENTACAO_PROJETO.md # requisitos, decisões, validação e questões em aberto
+scripts/run_tb.ps1       # roda os testbenches no xsim
 processador_riscV.srcs/
 ├── sources_1/new/       # RTL SystemVerilog e packages
 ├── sources_1/imports/new/ # cópias importadas das imagens de memória
@@ -200,7 +189,7 @@ Síntese, implementação e validação física na placa não foram verificadas 
 
 ## 8. Questões em aberto e divergências a confirmar
 
-1. **Flag `zero_o`:** o nome sugere zero, mas a implementação atribui `alu_o[0]`. A ALU retorna comparações como `0` ou `1`; portanto branches consomem esse bit como condição. Deve-se preservar ou substituir por flags explícitas segundo a intenção do projeto.
+1. **Flag `alu_lsb_o` (antes `zero_o`):** atribui `alu_o[0]`; foi renomeada porque não é uma flag de resultado zero. A ALU retorna comparações como `0` ou `1`; portanto branches consomem esse bit como condição. Deve-se preservar ou substituir por flags explícitas segundo a intenção do projeto.
 2. **`SLTU` (resolvido):** `cmp_sltu = ~carry` de `a + ~b + 1`; o carry vale 1 exatamente quando `a >= b` sem sinal, então `~carry` é `a < b`. Confirmado por `tb_alu` e `tb_core` (`sltu`, `sltiu`, `bltu`, `bgeu`).
 3. **Alinhamento do destino (conforme a ISA):** `execution` zera apenas o bit 0, como a ISA exige para `JALR`. Destinos com bit 1 em 1 não geram exceção de desalinhamento; o PC é usado com `addr[1:0]` descartado pela memória de instruções.
 4. **Endereços da RAM:** comentário de `data_memory` cita faixa até `0x3FFF`, mas a validação efetiva usa `addr_i < MEM_DEPTH * 4` (4096 bytes com parâmetros padrão, até `0x0FFF`). A lógica é que vale.

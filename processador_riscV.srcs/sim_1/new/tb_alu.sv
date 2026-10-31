@@ -25,14 +25,14 @@
  *
  * Aplica casos direcionados e 1000 vetores aleatorios. Os casos aleatorios sao
  * comparados com a funcao de referencia `ref_alu`; os casos manuais verificam
- * resultados e a saida `zero_o`. O resumo final informa quantidade de testes e
+ * resultados e a saida `alu_lsb_o`. O resumo final informa quantidade de testes e
  * falhas.
  *
  * @param a_i Primeiro operando aplicado ao DUT.
  * @param b_i Segundo operando aplicado ao DUT.
  * @param alu_op_i Codigo da operacao exercitada.
  * @retval alu_o Resultado observado da operacao.
- * @retval zero_o Bit de condicao observado na saida da ALU.
+ * @retval alu_lsb_o Bit de condicao observado na saida da ALU.
  */
 module tb_alu;
     import alu_pkg::*;
@@ -43,7 +43,7 @@ module tb_alu;
     logic [XLEN-1:0] b_i;
     alu_op_t         alu_op_i;
     logic [XLEN-1:0] alu_o;
-    logic            zero_o;
+    logic            alu_lsb_o;
 
     // Estat?sticas do Teste
     int total_tests = 0;
@@ -57,7 +57,7 @@ module tb_alu;
         .b_i(b_i),
         .alu_op_i(alu_op_i),
         .alu_o(alu_o),
-        .zero_o(zero_o)
+        .alu_lsb_o(alu_lsb_o)
     );
     
 
@@ -97,7 +97,7 @@ module tb_alu;
         input logic [XLEN-1:0] exp_alu, // Resultado esperado inserido MANUALMENTE
         input string           test_name = ""
     );
-        logic exp_zero;
+        logic exp_lsb;
 
         a_i      = a;
         b_i      = b;
@@ -105,15 +105,15 @@ module tb_alu;
 
         #10; // Aguarda a propaga??o combinacional
 
-        exp_zero = exp_alu[0]; // A flag zero reflete o bit [0] do resultado manual
+        exp_lsb = exp_alu[0]; // A flag alu_lsb_o reflete o bit [0] do resultado manual
         total_tests++;
 
-        if (alu_o !== exp_alu || zero_o !== exp_zero) begin
+        if (alu_o !== exp_alu || alu_lsb_o !== exp_lsb) begin
             error_count++;
             $display("[ERRO MANU #%0d] Falha: %s", error_count, test_name);
             $display("   OP: %s | A: 0x%8h | B: 0x%8h", op.name(), a, b);
-            $display("   Obtido:   alu_o = 0x%8h | zero_o = %0b", alu_o, zero_o);
-            $display("   Esperado: alu_o = 0x%8h | zero_o = %0b\n", exp_alu, exp_zero);
+            $display("   Obtido:   alu_o = 0x%8h | alu_lsb_o = %0b", alu_o, alu_lsb_o);
+            $display("   Esperado: alu_o = 0x%8h | alu_lsb_o = %0b\n", exp_alu, exp_lsb);
         end
     endtask
 
