@@ -15,8 +15,8 @@ Never modify the Vivado project file (`processador_riscV.xpr`) — not to add/re
 ## Source layout that matters
 
 - `processador_riscV.srcs/sources_1/new/` — all RTL and packages. Everything else under `processador_riscV.*/` (`.runs`, `.sim`, `.cache`, `.hw`, `.ip_user_files`) is Vivado-generated output; don't edit it.
-- `processador_riscV.srcs/sim_1/` — testbenches. Most live in `sim_1/new/`, but `tb_control_unit.sv` and `tb_write_back.sv` live in `sim_1/imports/new/` (that is the path the `.xpr` `sim_1` fileset references).
-- Memory images `program_bytes.mem` / `data.mem` (loaded via `$readmemh`) live only in `sources_1/imports/new/` (the copy the `.xpr` uses for synthesis and simulation). `data.mem` is written one byte per hex token (`00 00 00 0A`). `$readmemh` resolves paths relative to the simulator's run directory, so copy the `.mem` files there when simulating outside the Vivado GUI.
+- `processador_riscV.srcs/sim_1/new/` — all testbenches. When the user adds files in Vivado, remind them to uncheck "Copy sources into project" (otherwise Vivado makes stale copies under `*/imports/new/`) and to add testbenches as *simulation* sources.
+- Memory images `program_bytes.mem` / `data.mem` (loaded via `$readmemh`) live only in `sources_1/imports/new/` (the copy the `.xpr` uses for synthesis and simulation). `data.mem` is one byte per hex token in address order (byte at address 0 first), so the word 10 is `0A 00 00 00`. `$readmemh` resolves paths relative to the simulator's run directory, so copy the `.mem` files there when simulating outside the Vivado GUI.
 
 ## Simulation (xsim)
 

@@ -77,7 +77,7 @@ As saídas MMIO são inicializadas em zero no bloco `initial`; entradas vêm dir
 ## Organização dos arquivos
 
 - `processador_riscV.srcs/sources_1/new/`: RTL SystemVerilog e packages (`alu_pkg`, `branch_pkg`, `func3_pkg`, `func7_pkg`, `mem_pkg`, `opcode_pkg`).
-- `processador_riscV.srcs/sim_1/new/`: testbenches de ALU, controle, memória, decoder, execução, busca, banco de registradores (`tb_control_unit` e `tb_write_back` ficam em `sim_1/imports/new/`).
+- `processador_riscV.srcs/sim_1/new/`: testbenches de ALU, controle, memória, decoder, execução, busca, banco de registradores, write-back, sistema (`tb_core`) e programa C (`tb_program`).
 - `processador_riscV.srcs/constrs_1/imports/constraints/Nexys-A7-100T-Master.xdc`: constraints da placa.
 - `processador_riscV.runs/`: scripts e artefatos gerados de síntese/implementação. São saídas do Vivado, não a fonte principal do comportamento.
 - `control_unit.tex` e `Texto_colado_corrigido.tex`: documentos LaTeX relacionados ao projeto; a descrição funcional principal também está nos comentários dos módulos RTL.

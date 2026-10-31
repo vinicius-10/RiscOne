@@ -25,7 +25,6 @@ $ErrorActionPreference = 'Stop'
 $Root  = Split-Path -Parent $PSScriptRoot
 $Rtl   = Join-Path $Root 'processador_riscV.srcs\sources_1\new'
 $Sim   = Join-Path $Root 'processador_riscV.srcs\sim_1\new'
-$SimIm = Join-Path $Root 'processador_riscV.srcs\sim_1\imports\new'
 $Build = Join-Path $Root 'build\sim'
 # Imagens de memoria referenciadas pelo .xpr (sintese e simulacao).
 $MemDir = Join-Path $Root 'processador_riscV.srcs\sources_1\imports\new'
@@ -40,7 +39,7 @@ function Src([string]$tbDir, [string]$tb, [string[]]$dut) {
 }
 $Tests = [ordered]@{
     tb_alu               = Src $Sim   tb_alu               @('alu')
-    tb_control_unit      = Src $SimIm tb_control_unit      @('control_unit')
+    tb_control_unit      = Src $Sim   tb_control_unit      @('control_unit')
     # Sistema completo: programa RV32I executado no core.
     tb_core              = Src $Sim   tb_core              @('alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',
@@ -51,7 +50,7 @@ $Tests = [ordered]@{
     # tb_instruction_fetch define seu proprio modelo de instruction_memory.
     tb_instruction_fetch = Src $Sim   tb_instruction_fetch @('search')
     tb_register_file     = Src $Sim   tb_register_file     @('register_file')
-    tb_write_back        = Src $SimIm tb_write_back        @('write_back')
+    tb_write_back        = Src $Sim   tb_write_back        @('write_back')
     # Programa C (sw/apps/selftest) compilado com riscv-gcc e executado no core.
     tb_program           = Src $Sim   tb_program           @('alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',

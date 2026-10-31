@@ -158,8 +158,7 @@ sw/
 processador_riscV.srcs/
 ├── sources_1/new/       # RTL SystemVerilog e packages
 ├── sources_1/imports/new/ # cópias importadas das imagens de memória
-├── sim_1/new/           # testbenches
-├── sim_1/imports/new/   # cópias importadas de testbench
+├── sim_1/new/           # todos os testbenches
 └── constrs_1/imports/constraints/
     └── Nexys-A7-100T-Master.xdc
 processador_riscV.runs/  # scripts e resultados gerados pelo Vivado
@@ -171,7 +170,7 @@ processador_riscV.ip_user_files/ # arquivos auxiliares de IP/Vivado
 
 Arquivos RTL principais em `sources_1/new/`: `top_core.sv`, `core.sv`, `search.sv`, `instruction_memory.sv`, `decoder.sv`, `control_unit.sv`, `register_file.sv`, `imm_gen.sv`, `execution.sv`, `alu.sv`, `data_memory.sv`, `write_back.sv` e packages `alu_pkg.sv`, `branch_pkg.sv`, `func3_pkg.sv`, `func7_pkg.sv`, `mem_pkg.sv`, `opcode_pkg.sv`.
 
-Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_program.sv` (programa C compilado), `tb_alu.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`; em `sim_1/imports/new/`: `tb_control_unit.sv`, `tb_write_back.sv`.
+Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_program.sv` (programa C compilado), `tb_alu.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`, `tb_control_unit.sv`, `tb_write_back.sv`.
 
 ## 6. Convenções observadas no código
 
