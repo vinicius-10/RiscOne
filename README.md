@@ -72,27 +72,27 @@ top_core (pinos da Nexys A7)
 | `0x4000_000C` | Estado do display | Atualiza display `[15:0]` |
 | `0x4000_0010` | Linhas PMOD `[3:0]` | Atualiza colunas PMOD `[3:0]` |
 
-As saídas MMIO são inicializadas em zero no bloco `initial`; entradas vêm diretamente dos pinos. Os arquivos de memória são carregados por `$readmemh` e estão versionados/importados pelo projeto Vivado, além de cópias em `processador_riscV.srcs/sim_1/new/`.
+As saídas MMIO são inicializadas em zero no bloco `initial`; entradas vêm diretamente dos pinos. Os arquivos de memória são carregados por `$readmemh` e ficam somente em `processador_riscV.srcs/sources_1/imports/new/` (cópia referenciada pelo projeto Vivado).
 
 ## Organização dos arquivos
 
 - `processador_riscV.srcs/sources_1/new/`: RTL SystemVerilog e packages (`alu_pkg`, `branch_pkg`, `func3_pkg`, `func7_pkg`, `mem_pkg`, `opcode_pkg`).
-- `processador_riscV.srcs/sim_1/new/`: testbenches de ALU, controle, memória, decoder, execução, busca, banco de registradores e write-back; também contém as imagens de memória de simulação.
+- `processador_riscV.srcs/sim_1/new/`: testbenches de ALU, controle, memória, decoder, execução, busca, banco de registradores (`tb_control_unit` e `tb_write_back` ficam em `sim_1/imports/new/`).
 - `processador_riscV.srcs/constrs_1/imports/constraints/Nexys-A7-100T-Master.xdc`: constraints da placa.
 - `processador_riscV.runs/`: scripts e artefatos gerados de síntese/implementação. São saídas do Vivado, não a fonte principal do comportamento.
 - `control_unit.tex` e `Texto_colado_corrigido.tex`: documentos LaTeX relacionados ao projeto; a descrição funcional principal também está nos comentários dos módulos RTL.
 
 ## Testes e evidência disponível
 
-Há testbenches separados para os principais blocos (`tb_alu`, `tb_control_unit`, `tb_data_memory`, `tb_decoder`, `tb_execution`, `tb_instruction_fetch`, `tb_register_file`, `tb_write_back`). Os arquivos contêm verificações e mensagens PASS/FAIL. A existência desses testbenches **não confirma por si só que todas as simulações passaram**; este resumo não executou simulação nem síntese.
+Há testbenches separados para os principais blocos (`tb_alu`, `tb_control_unit`, `tb_data_memory`, `tb_decoder`, `tb_execution`, `tb_instruction_fetch`, `tb_register_file`, `tb_write_back`). Há também o testbench de sistema `tb_core`, que executa no core um programa cobrindo as 37 instruções RV32I do escopo, MMIO e instruções inválidas, verificando cada instrução. Todos rodam com `scripts/run_tb.ps1` (9/9 passando em 30/10/2026). Síntese e validação na placa não foram verificadas.
 
 ## Pontos de atenção para manutenção
 
 1. **Condição de branch depende do bit menos significativo:** `alu.zero_o` é atribuído a `alu_o[0]`, e não a uma redução NOR do resultado. O controle usa `OP_CMP` (igualdade) para BEQ/BNE e SLT/SLTU para branches relacionais, então a decisão atual depende do LSB dos resultados de comparação. Alterações na codificação dessas operações devem preservar essa convenção ou substituir por flags explícitas.
 2. **Alinhamento de destino:** `execution` zera somente o bit 0 do endereço de branch/jump. Imediatos B/J já incluem bit 0 zero; a implementação não zera explicitamente os bits `[1:0]`.
-3. **Reset:** `CPU_RESETN` é ativo baixo na placa e invertido em `core`; o reset encaminhado a `search` é síncrono ativo alto e reinicia apenas o PC. Banco de registradores e RAM não são limpos pelo reset.
-4. **Instruções inválidas/não suportadas:** a unidade de controle não sinaliza exceção/trap; por padrão, nenhuma escrita é habilitada e o fluxo sequencial continua.
-5. **MMIO e acessos parciais:** a decodificação de MMIO usa endereço exato por palavra via `addr[5:2]`; o tratamento de largura byte/halfword é implementado para RAM. Confirmar o comportamento desejado antes de usar loads/stores parciais em MMIO.
+3. **Reset:** `CPU_RESETN` é ativo baixo na placa e invertido em `core`; o reset encaminhado a `search` é síncrono ativo alto e reinicia apenas o PC. Banco de registradores e RAM não são limpos pelo reset (o banco começa em zero por `initial`).
+4. **Instruções inválidas/não suportadas:** a unidade de controle não sinaliza exceção/trap. A decodificação é estrita: opcodes desconhecidos e codificações inválidas (ex.: `funct7` da extensão M, `JALR` com `funct3 ≠ 000`) não escrevem nada e o fluxo sequencial continua.
+5. **MMIO e acessos parciais:** a decodificação de MMIO usa `addr[5:2]` para escolher o registrador; byte/halfword usam a mesma seleção de bytes e extensão de sinal da RAM (`SB`/`SH` alteram só os bytes endereçados).
 6. **Validação de hardware:** este documento descreve a RTL e a configuração encontrada no projeto. Não afirma que bitstream foi gerado nem que o comportamento foi validado na placa.
 
 ## Referência rápida para agentes de LLM

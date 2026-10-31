@@ -47,7 +47,7 @@
 module search #(
     parameter int XLEN      = 32,
     parameter int MEM_DEPTH = 1024,
-    parameter string MEM_FILE = "program_bytes.hex"
+    parameter string MEM_FILE = "program_bytes.mem"
 )(
     input  logic              clk,         // Sinal de clock
     input  logic              rest_i,      // Reset assíncrono/síncrono

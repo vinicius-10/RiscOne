@@ -34,7 +34,7 @@
  * @param XLEN Largura, em bits, de cada palavra e da interface. Padrao: 32.
  * @param MEM_DEPTH Quantidade de palavras na memoria. Padrao: 1024.
  * @param MEM_FILE Caminho do arquivo hexadecimal de inicializacao. Padrao:
- *                 `program_bytes.hex`.
+ *                 `program_bytes.mem`.
  * @param addr_i Endereco de byte da instrucao atual, normalmente vindo do PC.
  * @retval instr_o Palavra de XLEN bits lida do indice selecionado por addr_i.
  */

@@ -26,20 +26,21 @@ O subconjunto de instruções que a unidade de controle declara implementar é:
 - **Branches:** `BEQ`, `BNE`, `BLT`, `BGE`, `BLTU`, `BGEU`.
 - **Outras:** `LUI`, `AUIPC`, `JAL`, `JALR`.
 
-Opcode não reconhecido não gera escrita em registrador ou memória nem exceção/trap; o PC continua pelo caminho sequencial conforme o controle padrão.
+Opcode não reconhecido não gera escrita em registrador ou memória nem exceção/trap; o PC continua pelo caminho sequencial conforme o controle padrão. A decodificação é estrita: codificações inválidas dentro de um opcode conhecido também viram NOP — R-type com `funct7` diferente de `0000000`/`0100000` (ex.: `MUL` da extensão M), `SLLI`/`SRLI`/`SRAI` com `imm[11:5]` inválido, `JALR` com `funct3 ≠ 000`, e `funct3` sem instrução em loads/stores/branches. `ECALL`, `EBREAK` e `FENCE` executam como NOP.
 
 ### 2.2 Registradores e estado
 
 - Banco arquitetural de 32 registradores, com `x0` sempre lido como zero e escrita em `x0` descartada.
 - Duas portas de leitura combinacional e uma porta de escrita síncrona.
-- O banco não tem reset; `x1`–`x31` não têm valor definido até que sejam escritos.
+- O banco não tem reset; `x1`–`x31` começam em zero por um bloco `initial` (valor de inicialização na FPGA e ausência de `X` na simulação), mas o reset não os limpa.
 - O reset ativo baixo da placa é invertido para gerar reset síncrono ativo alto do PC. O reset zera somente o PC.
 
 ### 2.3 Memórias
 
 - Memória de instruções de leitura combinacional, inicializada com `$readmemh`.
 - Memória de dados organizada como bytes, com leitura combinacional e escrita na borda de subida.
-- Acesso à RAM suporta byte, halfword e word; loads suportam extensão com ou sem sinal.
+- Acesso à RAM e ao MMIO suporta byte, halfword e word; loads suportam extensão com ou sem sinal. Em MMIO, `SB`/`SH` alteram apenas os bytes endereçados do registrador de saída e `LB`/`LBU`/`LH`/`LHU` extraem o byte/halfword endereçado (ex.: `LBU` em `0x4000_0005` retorna `switch[15:8]`).
+- Acessos halfword/word desalinhados não são suportados (sem trap): o halfword usa `addr[1]` e a word ignora `addr[1:0]`.
 - Profundidade padrão declarada pelo core: 1024 palavras para cada memória.
 - Arquivos configurados no core: `program_bytes.mem` e `data.mem`.
 
@@ -91,6 +92,55 @@ top_core (interface dos pinos da Nexys A7)
 
 Busca de instrução, leituras do banco, geração de imediato, lógica de controle, ALU, leitura de RAM/MMIO e seleção de write-back são combinacionais. PC, banco de registradores, RAM e registradores de saída MMIO atualizam na borda positiva do clock. Assim, o datapath executa uma instrução por ciclo conforme o estado combinacional entre bordas.
 
+Correspondência com a divisão clássica de módulos (Patterson & Hennessy): a "pc_unit" é o registrador de PC e o mux PC+4/destino dentro de `search`; o cálculo do destino (`PC+imm` ou `(rs1+imm) & ~1`) e a decisão de desvio ficam em `execution`.
+
+```text
+          +-------------------------------- branch_taken / pc_branch ------------------+
+          v                                                                            |
+ [PC] --> instruction_memory --> instr --> control_unit --> sinais de controle         |
+   |                              |  \--> imm_gen ---------> imm ----+                 |
+   |                              \----> register_file --> rs1, rs2 |                 |
+   |                                                       |    |   |                 |
+   +--> PC, PC+4 ------------------------------------> [mux A][mux B] --> ALU --> alu_result
+                                                                                |   (endereço)
+                                                    rs2 --> data_memory <-------+
+                                                            |  (RAM / MMIO)
+                                     write_back: alu_result | mem_data --> register_file[rd]
+```
+
+### 3.2 Fluxo de dados por tipo de instrução
+
+| Tipo | Entrada A da ALU | Entrada B da ALU | Operação | Memória | Valor escrito em `rd` | Próximo PC |
+|---|---|---|---|---|---|---|
+| R (`add`…`and`) | rs1 | rs2 | conforme funct3/funct7 | — | resultado da ALU | PC+4 |
+| I aritm. (`addi`…`srai`) | rs1 | imm I | conforme funct3/imm[11:5] | — | resultado da ALU | PC+4 |
+| Load (`lb`…`lhu`) | rs1 | imm I | ADD (endereço) | lê, largura/sinal por funct3 | dado da memória | PC+4 |
+| Store (`sb`/`sh`/`sw`) | rs1 | imm S | ADD (endereço) | escreve rs2 (byte enables) | — | PC+4 |
+| Branch (`beq`…`bgeu`) | rs1 | rs2 | CMP / SLT / SLTU | — | — | PC+imm B se condição, senão PC+4 |
+| `lui` | — | imm U | PASS_B | — | imm U | PC+4 |
+| `auipc` | PC | imm U | ADD | — | PC + imm U | PC+4 |
+| `jal` | — | PC+4 | PASS_B | — | PC+4 | PC + imm J |
+| `jalr` | — | PC+4 | PASS_B | — | PC+4 | (rs1 + imm I) & ~1 |
+
+Nos branches, a condição é `alu_o[0]`: `OP_BCT` desvia quando é 1 e `OP_BCF` quando é 0. Assim `beq`=CMP/BCT, `bne`=CMP/BCF, `blt`=SLT/BCT, `bge`=SLT/BCF, `bltu`=SLTU/BCT, `bgeu`=SLTU/BCF.
+
+### 3.3 Tabela de controle (`control_unit`)
+
+| Opcode | `alu_op` | `alu_a` | `alu_b` | `branch_en` / `branch_op` | `reg_write` | `mem_write` | `mem_to_reg` | `mem_width` / `mem_signed` |
+|---|---|---|---|---|---|---|---|---|
+| `OP` 0x33 | por funct3/funct7 | 0 (rs1) | 00 (rs2) | 0 / — | 1* | 0 | 0 | — |
+| `OP_IMM` 0x13 | por funct3/imm[11:5] | 0 (rs1) | 01 (imm) | 0 / — | 1* | 0 | 0 | — |
+| `LOAD` 0x03 | ADD | 0 | 01 | 0 / — | 1* | 0 | 1 | B/H/W, com/sem sinal por funct3 |
+| `STORE` 0x23 | ADD | 0 | 01 | 0 / — | 0 | 1* | — | B/H/W por funct3 |
+| `BRANCH` 0x63 | CMP/SLT/SLTU | 0 | 00 | 1* / BCT ou BCF | 0 | 0 | — | — |
+| `LUI` 0x37 | PASS_B | — | 01 | 0 / — | 1 | 0 | 0 | — |
+| `AUIPC` 0x17 | ADD | 1 (PC) | 01 | 0 / — | 1 | 0 | 0 | — |
+| `JAL` 0x6F | PASS_B | — | 10 (PC+4) | 1 / BIP | 1 | 0 | 0 | — |
+| `JALR` 0x67 | PASS_B | — | 10 (PC+4) | 1* / BIR | 1* | 0 | 0 | — |
+| outros | ADD | 0 | 00 | 0 | 0 | 0 | 0 | W / sem sinal |
+
+\* Desativado (vira NOP) quando funct3/funct7 não correspondem a uma instrução RV32I válida.
+
 ## 4. Decisões refletidas no código
 
 Estas são decisões que podem ser observadas na implementação atual; não há histórico adicional de decisões além do estado deste workspace.
@@ -98,7 +148,7 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 1. **Implementação monociclo:** etapas funcionais estão ligadas em um ciclo, com estado atualizado na borda de subida.
 2. **Separação em módulos e packages:** enums de opcode, ALU, branch e memória são centralizados em packages SystemVerilog.
 3. **`x0` constante sem célula física:** o array armazena apenas `x1`–`x31`.
-4. **Reset limitado ao PC:** banco, RAM e saídas MMIO não são limpos pelo reset; periféricos têm inicialização `initial`.
+4. **Reset limitado ao PC:** banco, RAM e saídas MMIO não são limpos pelo reset; banco e periféricos têm inicialização `initial` em zero.
 5. **Memórias inicializadas por arquivo hexadecimal:** `$readmemh` e parâmetros de caminho permitem trocar as imagens.
 6. **MMIO dentro da memória de dados:** periféricos compartilham o caminho de load/store através de decodificação de endereço.
 7. **Falha de decode sem trap:** instrução não suportada recebe controles padrão e fluxo segue.
@@ -115,7 +165,7 @@ Texto_colado_corrigido.tex
 processador_riscV.srcs/
 ├── sources_1/new/       # RTL SystemVerilog e packages
 ├── sources_1/imports/new/ # cópias importadas das imagens de memória
-├── sim_1/new/           # testbenches e imagens de memória de simulação
+├── sim_1/new/           # testbenches
 ├── sim_1/imports/new/   # cópias importadas de testbench
 └── constrs_1/imports/constraints/
     └── Nexys-A7-100T-Master.xdc
@@ -128,7 +178,7 @@ processador_riscV.ip_user_files/ # arquivos auxiliares de IP/Vivado
 
 Arquivos RTL principais em `sources_1/new/`: `top_core.sv`, `core.sv`, `search.sv`, `instruction_memory.sv`, `decoder.sv`, `control_unit.sv`, `register_file.sv`, `imm_gen.sv`, `execution.sv`, `alu.sv`, `data_memory.sv`, `write_back.sv` e packages `alu_pkg.sv`, `branch_pkg.sv`, `func3_pkg.sv`, `func7_pkg.sv`, `mem_pkg.sv`, `opcode_pkg.sv`.
 
-Testbenches em `sim_1/new/`: `tb_alu.sv`, `tb_control_unit.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`, `tb_write_back.sv`.
+Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_alu.sv`, `tb_data_memory.sv`, `tb_decoder.sv`, `tb_execution.sv`, `tb_instruction_fetch.sv`, `tb_register_file.sv`; em `sim_1/imports/new/`: `tb_control_unit.sv`, `tb_write_back.sv`.
 
 ## 6. Convenções observadas no código
 
@@ -142,18 +192,22 @@ Testbenches em `sim_1/new/`: `tb_alu.sv`, `tb_control_unit.sv`, `tb_data_memory.
 
 ## 7. Validação registrada e limites
 
-O repositório contém testbenches dos blocos principais e resultados/artefatos gerados pelo Vivado. A simples presença desses arquivos não prova que as simulações ou síntese atuais passaram. Esta documentação não executou simulação, síntese ou validação física na placa e não afirma que um bitstream funcional foi carregado.
+O repositório contém testbenches dos blocos principais e o testbench de sistema `tb_core`, todos executáveis com `scripts/run_tb.ps1` (9/9 passando em 30/10/2026, xsim 2025.2).
+
+`tb_core` monta no próprio testbench um programa que cobre as 37 instruções do escopo, acessos MMIO de byte/halfword/word e instruções inválidas (`MUL`, `SLLI` com `imm[11:5]` inválido, `JALR` com `funct3 ≠ 000`, `ECALL`, `FENCE`). Ele verifica, instrução a instrução, o registrador destino, a RAM, as saídas MMIO e o próximo PC. Palavras logo após desvios tomados são armadilhas que falham se executadas.
+
+Síntese, implementação e validação física na placa não foram verificadas por esta documentação.
 
 ## 8. Questões em aberto e divergências a confirmar
 
 1. **Flag `zero_o`:** o nome sugere zero, mas a implementação atribui `alu_o[0]`. A ALU retorna comparações como `0` ou `1`; portanto branches consomem esse bit como condição. Deve-se preservar ou substituir por flags explícitas segundo a intenção do projeto.
-2. **`SLTU`:** `cmp_sltu` vem do carry de uma subtração sem sinal, enquanto a condição padrão `a < b` costuma corresponder ao borrow. Confirmar com a intenção funcional e os vetores de teste.
-3. **Alinhamento do destino:** `execution` limpa apenas o bit 0 (`& ~32'd1`), não os bits `[1:0]`. Imediatos B/J codificam bit 0 como zero; `JALR` pela ISA também requer limpeza do bit 0, mas o alinhamento final depende do endereço e da plataforma.
+2. **`SLTU` (resolvido):** `cmp_sltu = ~carry` de `a + ~b + 1`; o carry vale 1 exatamente quando `a >= b` sem sinal, então `~carry` é `a < b`. Confirmado por `tb_alu` e `tb_core` (`sltu`, `sltiu`, `bltu`, `bgeu`).
+3. **Alinhamento do destino (conforme a ISA):** `execution` zera apenas o bit 0, como a ISA exige para `JALR`. Destinos com bit 1 em 1 não geram exceção de desalinhamento; o PC é usado com `addr[1:0]` descartado pela memória de instruções.
 4. **Endereços da RAM:** comentário de `data_memory` cita faixa até `0x3FFF`, mas a validação efetiva usa `addr_i < MEM_DEPTH * 4` (4096 bytes com parâmetros padrão, até `0x0FFF`). A lógica é que vale.
-5. **Loads/stores MMIO parciais:** saídas de periférico recebem campos baixos do dado e a leitura MMIO retorna palavra; verificar a semântica desejada para acessos de byte/halfword em MMIO.
-6. **Parâmetros/caminhos de memória:** `core` usa defaults `.mem`, enquanto alguns cabeçalhos/comentários de `search`/`instruction_memory` mencionam `.hex`. As cópias atuais `.mem` estão em `sources_1/imports/new/` e `sim_1/new/`; resolver caminhos do `$readmemh` depende do diretório de execução/configuração do Vivado.
-7. **Reset/estado inicial:** `x1`–`x31` não inicializados podem aparecer como `X` até serem escritos; apenas PC e saídas MMIO têm inicialização/reset descritos acima.
-8. **Traps e instruções de sistema/barreira:** os opcodes aparecem no package, mas isso não significa implementação da classe; a unidade de controle declara apenas o subconjunto da seção 2.
+5. **Loads/stores MMIO parciais (resolvido):** byte/halfword em MMIO usam a mesma seleção de bytes e extensão de sinal da RAM; ver seção 2.3.
+6. **Caminhos de memória:** `search` agora também usa `program_bytes.mem` como default. Os arquivos `.mem` ficam somente em `sources_1/imports/new/` (cópia referenciada pelo `.xpr`); o `$readmemh` resolve caminhos relativos ao diretório de execução.
+7. **Reset/estado inicial (resolvido para simulação):** `x1`–`x31` começam em zero por `initial`; o reset continua zerando apenas o PC.
+8. **Traps e instruções de sistema/barreira:** `ECALL`, `EBREAK` e `FENCE` são NOPs; não há CSRs nem traps.
 
 ## 9. Referência de manutenção
 

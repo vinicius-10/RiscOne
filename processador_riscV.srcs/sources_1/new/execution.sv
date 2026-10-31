@@ -139,6 +139,8 @@ module execution
     end
 
     assign branch_a       = imm_i;
-    assign branch_address = (branch_a + branch_b) & ~32'd1;
+    // Zera o bit 0: exigido pelo JALR; inofensivo para branches/JAL, cujo
+    // imediato ja tem bit 0 = 0.
+    assign branch_address = (branch_a + branch_b) & ~XLEN'(1);
 
 endmodule

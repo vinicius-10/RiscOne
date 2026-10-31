@@ -79,9 +79,9 @@ module alu import alu_pkg::*; #(
     assign cmp_eq   = (add_sub_res[XLEN-1:0] == '0);
 
     logic [XLEN-1:0] res_arith;
-    assign res_arith = (alu_op_i == OP_SLT)  ? {31'b0, cmp_slt}  :
-                       (alu_op_i == OP_SLTU) ? {31'b0, cmp_sltu} :
-                       (alu_op_i == OP_CMP)  ? {31'b0, cmp_eq}   :
+    assign res_arith = (alu_op_i == OP_SLT)  ? {{(XLEN-1){1'b0}}, cmp_slt}  :
+                       (alu_op_i == OP_SLTU) ? {{(XLEN-1){1'b0}}, cmp_sltu} :
+                       (alu_op_i == OP_CMP)  ? {{(XLEN-1){1'b0}}, cmp_eq}   :
                        add_sub_res[XLEN-1:0];
 
     // --------------------------------------------------------
