@@ -189,8 +189,7 @@ module tb_core;
     function automatic logic [31:0] ram_word(logic [31:0] a);
         int w;
         w = a >> 2;
-        return {dut.data_memory_inst.mem[w][3], dut.data_memory_inst.mem[w][2],
-                dut.data_memory_inst.mem[w][1], dut.data_memory_inst.mem[w][0]};
+        return dut.data_memory_inst.mem[w];
     endfunction
 
     task automatic fail(string msg);
@@ -387,7 +386,7 @@ module tb_core;
         for (int i = 0; i < 1024; i++) dut.search_inst.instr_mem.mem[i] = NOP;
         foreach (prog[i]) dut.search_inst.instr_mem.mem[i] = prog[i].instr;
         for (int w = 0; w < 1024; w++)
-            for (int b = 0; b < 4; b++) dut.data_memory_inst.mem[w][b] = 8'h00;
+            dut.data_memory_inst.mem[w] = 32'h0;
 
         // Reset sincrono por dois ciclos.
         repeat (2) @(posedge clk);

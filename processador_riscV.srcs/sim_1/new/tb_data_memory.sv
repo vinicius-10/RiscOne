@@ -103,11 +103,11 @@ module tb_data_memory;
             // Calcula o índice de palavra da memória interna (addr_i / 4)
             word_idx = addr_i >> 2;
             
-            // Leitura direta da matriz interna mem[0:MEM_DEPTH-1][0:3]
-            b0 = DUT.mem[word_idx][0];
-            b1 = DUT.mem[word_idx][1];
-            b2 = DUT.mem[word_idx][2];
-            b3 = DUT.mem[word_idx][3];
+            // Leitura direta do array interno mem[0:MEM_DEPTH-1] (words de 32 bits)
+            b0 = DUT.mem[word_idx][7:0];
+            b1 = DUT.mem[word_idx][15:8];
+            b2 = DUT.mem[word_idx][23:16];
+            b3 = DUT.mem[word_idx][31:24];
 
             if (data_o === expected_data_o) begin
                 $display("[PASS] Teste %02d: %-48s | DATA_O: 0x%08h | MEM[%0d]: [3]=0x%02h [2]=0x%02h [1]=0x%02h [0]=0x%02h", 

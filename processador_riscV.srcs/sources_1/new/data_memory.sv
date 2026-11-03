@@ -49,11 +49,19 @@ module data_memory
     output logic [3:0]       pmod_col_o
 );
 
-    // Matriz de RAM interna (Byte-addressable organizada em words de 4 bytes)
-    logic [7:0] mem [0:MEM_DEPTH-1][0:3];
+    // RAM interna: array 1-D de words com escrita por faixa de byte (forma que
+    // o Vivado infere como RAM distribuida; o array 2-D de bytes virava FFs).
+    logic [31:0] mem [0:MEM_DEPTH-1];
+
+    // data.mem tem um byte por token em ordem de endereco; monta as words
+    // little-endian a partir de um array temporario.
+    logic [7:0] mem_init_bytes [0:MEM_DEPTH*4-1];
 
     initial begin
-        $readmemh(MEM_FILE, mem);
+        $readmemh(MEM_FILE, mem_init_bytes);
+        for (int w = 0; w < MEM_DEPTH; w++)
+            mem[w] = {mem_init_bytes[4*w+3], mem_init_bytes[4*w+2],
+                      mem_init_bytes[4*w+1], mem_init_bytes[4*w]};
     end
 
     localparam int ADDR_WIDTH = $clog2(MEM_DEPTH);
@@ -90,8 +98,7 @@ module data_memory
 
     always_comb begin
         if (ram_addr_valid)
-            ram_word_data = {mem[word_addr][3], mem[word_addr][2],
-                             mem[word_addr][1], mem[word_addr][0]};
+            ram_word_data = mem[word_addr];
         else
             ram_word_data = '0;
     end
@@ -153,10 +160,8 @@ module data_memory
 
     always_ff @(posedge clk) begin
         if (ram_write_en) begin
-            if (we_byte[0]) mem[word_addr][0] <= wdata[7:0];
-            if (we_byte[1]) mem[word_addr][1] <= wdata[15:8];
-            if (we_byte[2]) mem[word_addr][2] <= wdata[23:16];
-            if (we_byte[3]) mem[word_addr][3] <= wdata[31:24];
+            for (int b = 0; b < 4; b++)
+                if (we_byte[b]) mem[word_addr][8*b +: 8] <= wdata[8*b +: 8];
         end
     end
 
