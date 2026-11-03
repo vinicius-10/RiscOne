@@ -48,6 +48,9 @@
  * @retval pc_branch_o Endereco de destino calculado, com o bit 0 zerado.
  * @retval alu_result_o Resultado da operacao selecionada para a ALU.
  * @retval branch_taken_o Indica se o desvio deve ser tomado.
+ * @retval mem_addr_o Endereco de load/store (rs1 + imediato), calculado por um
+ *                    somador dedicado em paralelo a ALU para encurtar o
+ *                    caminho ate a memoria de dados.
  */
 module execution
     import alu_pkg::*;
@@ -69,7 +72,8 @@ module execution
 
     output logic [XLEN-1:0] pc_branch_o,
     output logic [XLEN-1:0] alu_result_o,
-    output logic            branch_taken_o
+    output logic            branch_taken_o,
+    output logic [XLEN-1:0] mem_addr_o
 );
 
     logic [XLEN-1:0] alu_a;
@@ -142,5 +146,9 @@ module execution
     // Zera o bit 0: exigido pelo JALR; inofensivo para branches/JAL, cujo
     // imediato ja tem bit 0 = 0.
     assign branch_address = (branch_a + branch_b) & ~XLEN'(1);
+
+    // Endereco da memoria de dados: nao passa pelos muxes de operando nem pelo
+    // mux de saida da ALU.
+    assign mem_addr_o = reg_data1_i + imm_i;
 
 endmodule

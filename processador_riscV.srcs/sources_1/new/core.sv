@@ -85,6 +85,7 @@ module core #(
     logic [XLEN-1:0] immediate;
     logic [XLEN-1:0] data_memory_data;
     logic [XLEN-1:0] alu_result;
+    logic [XLEN-1:0] data_memory_addr;
     logic [XLEN-1:0] write_back_data;
     logic            pc_write_enable;
     logic            branch_taken;
@@ -147,7 +148,8 @@ module core #(
         .control_alu_b   (alu_b_select),
         .pc_branch_o     (pc_branch),
         .alu_result_o    (alu_result),
-        .branch_taken_o  (branch_taken)
+        .branch_taken_o  (branch_taken),
+        .mem_addr_o      (data_memory_addr)
     );
 
     data_memory #(
@@ -159,7 +161,7 @@ module core #(
         .mem_write_i (data_memory_write_enable),
         .mem_width_i (data_memory_width),
         .mem_signed_i(data_memory_signed),
-        .addr_i      (alu_result),
+        .addr_i      (data_memory_addr),
         .data_i      (rs2_data),
         .data_o      (data_memory_data),
         .switch_i    (switch_i),

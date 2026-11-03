@@ -158,7 +158,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
 | `imm_gen` | `instruction_i` | `imm_o` | §4 |
 | `control_unit` | `instruction_i` | §5.1 | §5 |
-| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o` | §5.2; `pc_branch_o = (imm + base) & ~1` |
+| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o` | §5.2; `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B) |
 | `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o`, `alu_lsb_o` | §6 |
 | `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `data_i`, `switch_i`, `button_i`, `pmod_row_i` | `data_o`, `led_o`, `seg7_o`, `pmod_col_o` | §9 |
 | `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
@@ -180,7 +180,8 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `pc_write_enable` | `decoder.search_pc_write_o` | `search.pc_write_i` |
 | `branch_taken` | `execution.branch_taken_o` | `search.pc_branch_i` |
 | `pc_branch` | `execution.pc_branch_o` | `search.new_pc_i` |
-| `alu_result` | `execution.alu_result_o` | `data_memory.addr_i`, `write_back.alu_result_i` |
+| `alu_result` | `execution.alu_result_o` | `write_back.alu_result_i` |
+| `data_memory_addr` (rs1 + imm) | `execution.mem_addr_o` | `data_memory.addr_i` |
 | `data_memory_write_enable`, `_width`, `_signed` | `decoder.data_memory_mem_*_o` | `data_memory.mem_write_i`, `mem_width_i`, `mem_signed_i` |
 | `data_memory_data` | `data_memory.data_o` | `write_back.mem_data_i` |
 | `mem_to_reg` | `decoder.write_back_mem_to_reg_o` | `write_back.mem_to_reg_i` |
@@ -191,9 +192,9 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 Fluxo de um ciclo:
 
 ```text
-PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► execution(ALU) ─► alu_result ─┬─► data_memory ─┐
- ▲                                    └─ controle ────►                              │                 ▼
- │                                                                                    └──────────► write_back ─► register_file (borda)
+PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► execution ─┬─ rs1+imm ───► data_memory ─┐
+ ▲                                    └─ controle ────►            │                              ▼
+ │                                                                 └─ ALU ─► alu_result ─────► write_back ─► register_file (borda)
  └─ search: PC = branch_taken ? pc_branch : PC+4 (borda) ◄── execution
 ```
 

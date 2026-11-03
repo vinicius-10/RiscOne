@@ -57,7 +57,7 @@ O script não usa nem altera o `.xpr`. Os runs da GUI (`processador_riscV.runs/`
 | `DSP48E1` | multiplicação; aqui não deveria aparecer (RV32I sem M). |
 
 Caminho típico de um monociclo (todos combinacionais em série num ciclo):
-`PC (FF) → instruction_memory → decoder/control_unit → register_file (leitura) → muxes A/B → ALU → [data_memory (endereço → leitura) → write_back] → register_file (escrita)` e o laço de desvio `ALU → alu_lsb_o → branch_taken → mux do PC → PC`.
+`PC (FF) → instruction_memory → decoder/control_unit → register_file (leitura) → muxes A/B → ALU → write_back → register_file (escrita)`; no load, o endereço vem do somador dedicado `rs1 + imm` (`execution.mem_addr_o`): `register_file → somador → data_memory (decodificação de região + leitura) → write_back → register_file` e o laço de desvio `ALU → alu_lsb_o → branch_taken → mux do PC → PC`.
 
 ## Alavancas, da menos para a mais invasiva
 

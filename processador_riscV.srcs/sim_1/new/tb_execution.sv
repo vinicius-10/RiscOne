@@ -73,6 +73,7 @@ module tb_execution;
     logic [XLEN-1:0]   pc_branch_o;
     logic [XLEN-1:0]   alu_result_o;
     logic              branch_taken_o;
+    logic [XLEN-1:0]   mem_addr_o;
 
     // Controladora de falhas interna
     integer fail_count = 0;
@@ -95,7 +96,8 @@ module tb_execution;
         .control_alu_b   (control_alu_b),
         .pc_branch_o     (pc_branch_o),
         .alu_result_o    (alu_result_o),
-        .branch_taken_o  (branch_taken_o)
+        .branch_taken_o  (branch_taken_o),
+        .mem_addr_o      (mem_addr_o)
     );
     import alu_pkg::*;
     import branch_pkg::*;
@@ -129,6 +131,26 @@ module tb_execution;
                 $display("       ALU  -> Obtido: 0x%08h | Esperado: 0x%08h", alu_result_o, expected_alu_result);
                 $display("       PC_BR-> Obtido: 0x%08h | Esperado: 0x%08h", pc_branch_o, expected_pc_branch);
                 $display("       TAKEN-> Obtido: %0b          | Esperado: %0b \n", branch_taken_o, expected_branch_taken);
+                fail_count++;
+            end
+        end
+    endtask
+
+    // Verifica o endereco de load/store (rs1 + imm), independente da ALU.
+    task automatic check_mem_addr(
+        input int              test_num,
+        input string           test_name,
+        input logic [XLEN-1:0] expected_mem_addr
+    );
+        begin
+            #1;
+            if (mem_addr_o === expected_mem_addr) begin
+                $display("[PASS] Teste %02d: %-50s | MEM_ADDR: 0x%08h",
+                         test_num, test_name, mem_addr_o);
+            end else begin
+                $display("[FAIL] Teste %02d: %-42s", test_num, test_name);
+                $display("       MEM_ADDR -> Obtido: 0x%08h | Esperado: 0x%08h \n",
+                         mem_addr_o, expected_mem_addr);
                 fail_count++;
             end
         end
@@ -601,7 +623,44 @@ module tb_execution;
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b01;         // MUX B: Seleciona Imediato (imm_i)
         check_result(34, "NOP (ADDI x0, x0, 0)", 32'h0000_0000, 32'h0000_1000, 1'b0);
-        
+
+        // ---------------------------------------------------------------------
+        // SEÇÃO 5: ENDEREÇO DE LOAD/STORE (mem_addr_o = rs1 + imm)
+        // Independe da operação da ALU e do MUX B (somador dedicado).
+        // ---------------------------------------------------------------------
+
+        @(negedge clk); // TESTE 35: offset positivo, MUX B em rs2
+        imm_i            = 32'h0000_0008;
+        reg_data1_i      = 32'h0000_0100;
+        reg_data2_i      = 32'h0000_0055;
+        alu_control_i    = OP_AND;
+        branch_enable_i  = 1'b0;
+        control_alu_a    = 1'b1;          // MUX A: PC (não afeta o endereço)
+        control_alu_b    = 2'b00;         // MUX B: rs2 (não afeta o endereço)
+        check_mem_addr(35, "MEM_ADDR: 0x100 + 8 (ALU em AND)", 32'h0000_0108);
+
+        @(negedge clk); // TESTE 36: offset negativo
+        imm_i            = -32'd4;
+        reg_data1_i      = 32'h0000_0100;
+        alu_control_i    = OP_ADD;
+        control_alu_a    = 1'b0;
+        control_alu_b    = 2'b01;
+        check_mem_addr(36, "MEM_ADDR: 0x100 + (-4)", 32'h0000_00FC);
+
+        @(negedge clk); // TESTE 37: endereço MMIO (display de 7 segmentos)
+        imm_i            = 32'h0000_000C;
+        reg_data1_i      = 32'h4000_0000;
+        alu_control_i    = OP_SLL;
+        control_alu_b    = 2'b10;         // MUX B: PC+4 (não afeta o endereço)
+        check_mem_addr(37, "MEM_ADDR: 0x40000000 + 0xC (MMIO)", 32'h4000_000C);
+
+        @(negedge clk); // TESTE 38: estouro em 32 bits
+        imm_i            = 32'h0000_0010;
+        reg_data1_i      = 32'hFFFF_FFF8;
+        alu_control_i    = OP_PASS_B;
+        control_alu_b    = 2'b00;
+        check_mem_addr(38, "MEM_ADDR: 0xFFFFFFF8 + 0x10 (wrap)", 32'h0000_0008);
+
         
         // =========================================================================
         // 6. RELATÓRIO FINAL
