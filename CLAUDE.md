@@ -75,8 +75,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 leds -Install   
 ## Architecture
 
 ```text
-top_core          board pins -> core (CPU_RESETN passes through unchanged)
-└── core          wires the datapath; inverts active-low CPU_RESETN; params XLEN, MEM_DEPTH, *_MEM_FILE
+top_core          board pins -> core; inverts active-low CPU_RESETN into core.reset_i (active high)
+└── core          wires the datapath; params XLEN, MEM_DEPTH, *_MEM_FILE
     ├── search ── instruction_memory   PC register, PC+4 vs branch target mux
     ├── decoder   register_file + imm_gen + control_unit
     ├── execution ── alu               operand muxes, branch decision + target, dedicated rs1+imm adder -> data_memory address

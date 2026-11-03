@@ -58,7 +58,7 @@ module core #(
     parameter string DATA_MEM_FILE = "data.mem"
 )(
     input logic clk,
-    input logic CPU_RESETN,
+    input logic reset_i,
     input logic [15:0] switch_i,
     input logic [4:0] button_i,
     input logic [3:0] pmod_row_i,
@@ -71,10 +71,6 @@ module core #(
     import alu_pkg::*;
     import branch_pkg::*;
     import mem_pkg::*;
-    
-    logic reset_i;
-    // CPU_RESETN e ativo em nivel baixo; search espera reset ativo em nivel alto.
-    assign reset_i = ~CPU_RESETN;
 
     logic [XLEN-1:0] pc;
     logic [XLEN-1:0] pc_next;
@@ -106,7 +102,7 @@ module core #(
         .MEM_FILE(INSTR_MEM_FILE)
     ) search_inst (
         .clk         (clk),
-        .rest_i      (reset_i),
+        .reset_i     (reset_i),
         .pc_write_i  (pc_write_enable),
         .pc_branch_i (branch_taken),
         .new_pc_i    (pc_branch),

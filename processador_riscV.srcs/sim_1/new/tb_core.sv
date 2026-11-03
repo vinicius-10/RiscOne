@@ -60,7 +60,7 @@ module tb_core;
     // DUT
     // ------------------------------------------------------------------
     logic        clk = 1'b0;
-    logic        cpu_resetn = 1'b0;
+    logic        reset = 1'b1;
     logic [15:0] led, seg7;
     logic [3:0]  pmod_col;
 
@@ -69,7 +69,7 @@ module tb_core;
         .MEM_DEPTH(1024)
     ) dut (
         .clk        (clk),
-        .CPU_RESETN (cpu_resetn),
+        .reset_i    (reset),
         .switch_i   (SWITCH),
         .button_i   (5'b00000),
         .pmod_row_i (4'b0000),
@@ -390,7 +390,7 @@ module tb_core;
 
         // Reset sincrono por dois ciclos.
         repeat (2) @(posedge clk);
-        @(negedge clk) cpu_resetn = 1'b1;
+        @(negedge clk) reset = 1'b0;
 
         for (int cycle = 0; cycle < 1000 && !halted; cycle++) begin
             pc  = dut.pc;

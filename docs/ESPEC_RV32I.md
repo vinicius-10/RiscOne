@@ -21,9 +21,9 @@ Se o RTL mudar, atualize este arquivo junto.
 - Um único clock `clk`, borda de subida.
 - Elementos sequenciais: PC (`search`), escrita no `register_file`, escrita na RAM e
   registradores de saída MMIO (`data_memory`). Todo o resto é combinacional.
-- Pino da placa `CPU_RESETN` (ativo em nível **baixo**) entra em `top_core` e é repassado
-  sem alteração para `core`. **O `core` inverte** (`reset_i = ~CPU_RESETN`) e entrega um
-  reset **síncrono ativo em nível alto** ao `search` (porta `rest_i`).
+- Pino da placa `CPU_RESETN` (ativo em nível **baixo**) entra em `top_core`, que **inverte**
+  (`reset = ~CPU_RESETN`) e entrega ao `core` (porta `reset_i`) um reset **síncrono ativo em
+  nível alto**; o `core` repassa `reset_i` sem alteração ao `search` (porta `reset_i`).
 - O reset **zera somente o PC**. Registradores, RAM e saídas MMIO não são resetados; eles
   partem dos valores de `initial` (zeros / arquivos `.mem`), que valem só na carga do FPGA.
 
@@ -133,8 +133,8 @@ condição do branch. Ao mudar a ALU, mantenha CMP/SLT/SLTU retornando exatament
 ## 7. Hierarquia e interfaces dos módulos
 
 ```text
-top_core          pinos da placa -> core
-└── core          interliga o datapath; inverte CPU_RESETN; params XLEN, MEM_DEPTH, INSTR_MEM_FILE, DATA_MEM_FILE
+top_core          pinos da placa -> core; inverte CPU_RESETN (reset ativo alto para o core)
+└── core          interliga o datapath; params XLEN, MEM_DEPTH, INSTR_MEM_FILE, DATA_MEM_FILE
     ├── search            PC + mux PC+4 / alvo de desvio
     │   └── instruction_memory
     ├── decoder           separa rd/rs1/rs2 da instrução
@@ -151,8 +151,8 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 
 | Módulo | Entradas | Saídas | Comportamento |
 | :-- | :-- | :-- | :-- |
-| `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `button = {BTND,BTNR,BTNL,BTNU,BTNC}`; `seg7[7:0]` → cátodos, `seg7[15:8]` → ânodos |
-| `search` | `clk`, `rest_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; na borda: `rest_i` → PC=0, senão se `pc_write_i`: PC = `pc_branch_i ? new_pc_i : pc_next` |
+| `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `reset = ~CPU_RESETN` → `core.reset_i`; `button = {BTND,BTNR,BTNL,BTNU,BTNC}`; `seg7[7:0]` → cátodos, `seg7[15:8]` → ânodos |
+| `search` | `clk`, `reset_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; na borda: `reset_i` → PC=0, senão se `pc_write_i`: PC = `pc_branch_i ? new_pc_i : pc_next` |
 | `instruction_memory` | `addr_i` | `instr_o` | ROM de palavras, leitura combinacional por `addr_i[..:2]`, carregada de `MEM_FILE` |
 | `decoder` | `clk`, `instruction_i`, `written_data_i` | `rs1_o`, `rs2_o`, `imm_o` + todas as saídas do `control_unit` | rd=`[11:7]`, rs1=`[19:15]`, rs2=`[24:20]` |
 | `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
@@ -167,7 +167,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 
 | Sinal no `core` | Origem | Destino(s) |
 | :-- | :-- | :-- |
-| `reset_i` (`~CPU_RESETN`) | core | `search.rest_i` |
+| `reset_i` | porta do `core` (`top_core`: `~CPU_RESETN`) | `search.reset_i` |
 | `instruction` | `search.instr_o` | `decoder.instruction_i` |
 | `pc` | `search.pc_o` | `execution.pc_i` |
 | `pc_next` (PC+4) | `search.pc_next` | `execution.pc_next_i` |

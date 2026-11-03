@@ -48,10 +48,14 @@ module top_core (
     assign button = {BTND, BTNR, BTNL, BTNU, BTNC};
     assign c_7_segment = seg7[7:0];
     assign a_7_segment = seg7[15:8];
-
+    
+    logic reset;
+    // CPU_RESETN e ativo em nivel baixo; core espera reset ativo em nivel alto.
+    assign reset = ~CPU_RESETN;
+    
     core core_inst (
         .clk         (clk),
-        .CPU_RESETN  (CPU_RESETN),
+        .reset_i     (reset),
         .switch_i    (switch),
         .button_i    (button),
         .pmod_row_i  (pmod_row),

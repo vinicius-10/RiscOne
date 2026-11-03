@@ -41,7 +41,7 @@ module tb_program;
     localparam logic [31:0] HALT_INSTR = 32'h0000_006F; // jal x0, 0  (j .)
 
     logic        clk;
-    logic        CPU_RESETN;
+    logic        reset;
     logic [15:0] switch_i;
     logic [4:0]  button_i;
     logic [3:0]  pmod_row_i;
@@ -51,7 +51,7 @@ module tb_program;
 
     core dut (
         .clk        (clk),
-        .CPU_RESETN (CPU_RESETN),
+        .reset_i    (reset),
         .switch_i   (switch_i),
         .button_i   (button_i),
         .pmod_row_i (pmod_row_i),
@@ -71,11 +71,11 @@ module tb_program;
         button_i   = '0;
         pmod_row_i = '0;
 
-        // Reset sincrono: mantem CPU_RESETN baixo por algumas bordas.
-        CPU_RESETN = 1'b0;
+        // Reset sincrono: mantem reset (ativo alto) por algumas bordas.
+        reset = 1'b1;
         repeat (3) @(posedge clk);
         @(negedge clk);
-        CPU_RESETN = 1'b1;
+        reset = 1'b0;
 
         $display("==============================================================");
         $display(" tb_program: executando programa compilado (riscv-gcc)");

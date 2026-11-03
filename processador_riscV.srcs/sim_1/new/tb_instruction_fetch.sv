@@ -29,7 +29,7 @@
  * conteudo da instrucao.
  *
  * @param clk Clock usado para atualizar o PC.
- * @param rest_i Reset do PC, ativo em nivel alto.
+ * @param reset_i Reset do PC, ativo em nivel alto.
  * @param pc_write_i Habilita a atualizacao do PC; em 0, mantem o valor atual.
  * @param pc_branch_i Seleciona o carregamento de `new_pc_i` quando habilitado.
  * @param new_pc_i Endereco de destino aplicado ao caminho de desvio.
@@ -53,7 +53,7 @@ module tb_instruction_fetch;
     logic [XLEN-1:0]   new_pc_i;
     logic              pc_write_i;
     logic              pc_branch_i;
-    logic              rest_i;
+    logic              reset_i;
     
     logic [XLEN-1:0]   instr_o;
     logic [XLEN-1:0]   pc_o;
@@ -78,7 +78,7 @@ module tb_instruction_fetch;
         .new_pc_i   (new_pc_i),
         .pc_write_i (pc_write_i),
         .pc_branch_i(pc_branch_i),
-        .rest_i     (rest_i),
+        .reset_i     (reset_i),
         .instr_o    (instr_o),
         .pc_o       (pc_o),
         .pc_next    (pc_next)
@@ -119,7 +119,7 @@ module tb_instruction_fetch;
     initial begin
         // Inicialização dos sinais
         clk         = 0;
-        rest_i      = 1;
+        reset_i      = 1;
         pc_write_i  = 0;
         pc_branch_i = 0;
         new_pc_i    = 32'h0;
@@ -134,7 +134,7 @@ module tb_instruction_fetch;
 
         // Desativa Reset
         @(negedge clk);
-        rest_i = 0;
+        reset_i = 0;
 
         // --- TESTE 2: Incremento Sequencial (PC + 4) ---
         @(negedge clk);
