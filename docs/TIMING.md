@@ -15,6 +15,7 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-03 | antigo_placa | placa | RTL de `ff61b04` (antes de `a94a053` "melhoria de sinais internos"), medido num worktree | -4,735 | 67,9 | 13393 | 44 | 32839 | 0 | referência para o "≈ -4,6" lembrado pelo usuário |
 | 2026-11-03 | antigo_selftest | selftest | RTL de `ff61b04` | -11,848 | 45,8 | 15561 | 44 | 32867 | 0 | igual a `base_selftest` (−12,1) dentro do ruído: `a94a053` não piorou o processador |
 | 2026-11-03 | dmem_lutram_placa | placa | RTL atual com `dmem_lutram` | -0,834 | 92,3 | — | — | — | 0 | com o programa da placa fica a 0,8 ns de fechar 100 MHz |
+| 2026-11-03 | base_completo | placa (`autoteste_placa`, 37 instruções) | programa da placa trocado pelo autoteste com todas as instruções — **nova referência** | -7,625 | 56,7 | 1684 | 556 | 99 | 0 | igual ao selftest dentro do ruído; a partir daqui `-App placa` = processador completo |
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
 

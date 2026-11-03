@@ -59,7 +59,7 @@ Synthesis/implementation for **measurement** (timing/area) use `scripts/synth.ps
 
 ## Software (riscv-gcc)
 
-Toolchain: xPack `riscv-none-elf-gcc` 15.2.0 at `D:\ProgramFiles\xpack-riscv-none-elf-gcc-15.2.0-1\bin` (not on PATH; override with `-GccBin` or `$env:RISCV_GCC_BIN`). Programs live in `sw/apps/<name>/` (`selftest` = C self-check for simulation, `asm_exemplo` = pure-assembly template, `leds` = board demo); shared startup/linker/MMIO in `sw/common/`. **When writing or reviewing programs for the core, load the project skill `rv32i-programas`** (`.claude/skills/rv32i-programas/SKILL.md`): what executes vs. silently NOPs, memory map, Harvard/.rodata rule, build/test flow. Run any app on the core with `run_tb.ps1 tb_program -App <name>` (default `selftest`).
+Toolchain: xPack `riscv-none-elf-gcc` 15.2.0 at `D:\ProgramFiles\xpack-riscv-none-elf-gcc-15.2.0-1\bin` (not on PATH; override with `-GccBin` or `$env:RISCV_GCC_BIN`). Programs live in `sw/apps/<name>/` (`selftest` = C self-check for simulation, `autoteste_placa` = selftest copy that uses all 37 RV32I instructions — installed as the board program since 2026-11-03, so `synth.ps1 -App placa` measures the full core, `asm_exemplo` = pure-assembly template, `leds` = board demo); shared startup/linker/MMIO in `sw/common/`. **When writing or reviewing programs for the core, load the project skill `rv32i-programas`** (`.claude/skills/rv32i-programas/SKILL.md`): what executes vs. silently NOPs, memory map, Harvard/.rodata rule, build/test flow. Run any app on the core with `run_tb.ps1 tb_program -App <name>` (default `selftest`).
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 selftest           # -> build/sw/selftest/{program_bytes,data}.mem, .elf, .lst, .map

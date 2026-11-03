@@ -1,3 +1,18 @@
-00 00 00 0A // Endereço 0x00 (Índice 0): Valor A = 10 (0x0A) 
-00 00 00 14 // Endereço 0x04 (Índice 1): Valor B = 20 (0x14) 
-00 00 00 00 // Endereço 0x08 (Índice 2): Inicializado em 0 (Receberá o resultado 30)
+// autoteste_placa - gerado por scripts/build_sw.ps1 (nao editar a mao)
+0a 00 61 00 // 0000
+03 00 2b 00 // 0004
+fa 00 07 00 // 0008
+d2 04 00 00 // 000c
+d4 00 00 00 // 0010
+dc 00 00 00 // 0014
+52 56 33 32 // 0018
+49 00 00 00 // 001c
+01 00 01 00 // 0020
+02 00 03 00 // 0024
+05 00 08 00 // 0028
+fe ff 34 12 // 002c
+ff 02 80 7f // 0030
+44 33 22 11 // 0034
+01 00 00 80 // 0038
+03 00 00 00 // 003c
+f9 ff ff ff // 0040
