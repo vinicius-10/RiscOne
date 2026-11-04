@@ -19,6 +19,10 @@ Single-cycle RISC-V RV32I processor in SystemVerilog, built as a Vivado 2025.2 p
 
 For complex work (new module, interface/port changes, new instructions/extensions, timing or memory-map changes, or anything touching 3+ RTL files) load the project skill `planejar-tarefa` before editing: resolve open questions with the user, write the plan to `docs/planos/`, get explicit approval, then execute testbench-first. Small, clear requests stay direct — no planning ceremony.
 
+## Commits
+
+Commit only when the user asks. When they do, load the project skill `fazer-commit`: Conventional Commits with the summary in Portuguese, one commit per logical change, `run_tb.ps1` must pass before committing RTL/testbench changes, and never stage the `.xpr`, Vivado outputs or installed `.mem` files without asking.
+
 ## Do not edit `processador_riscV.xpr`
 
 Never modify the Vivado project file (`processador_riscV.xpr`) — not to add/remove sources, change the `sim_1` top, fix paths or anything else. The user manages it through the Vivado GUI. If a change needs the `.xpr` updated (new source file, new testbench, moved file), tell the user what to add/change in Vivado instead of doing it.
