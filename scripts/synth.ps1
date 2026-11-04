@@ -8,6 +8,7 @@
     .\scripts\synth.ps1 -Tag antes_regfile    # guarda numa pasta propria (comparar A/B)
     .\scripts\synth.ps1 -SynthOnly            # so sintese (rapido; timing apenas estimado)
     .\scripts\synth.ps1 -Tag teste -PhysOpt   # acrescenta phys_opt_design entre place e route
+    .\scripts\synth.ps1 -Tag teste -PlaceDirective Explore -RouteDirective Explore   # diretivas da ferramenta
     .\scripts\synth.ps1 -Compare              # tabela com o historico de execucoes
     .\scripts\synth.ps1 -Tag base -ParseOnly  # refaz o resumo de um run existente (sem Vivado)
 
@@ -23,6 +24,9 @@ param(
     [string]$Tag = 'atual',
     [switch]$SynthOnly,
     [switch]$PhysOpt,            # roda phys_opt_design depois do place (replicacao de fanout alto)
+    [string]$SynthDirective = '', # -directive do synth_design (ex.: PerformanceOptimized)
+    [string]$PlaceDirective = '', # -directive do place_design (ex.: Explore, ExtraTimingOpt)
+    [string]$RouteDirective = '', # -directive do route_design (ex.: Explore)
     [switch]$Compare,
     [switch]$ParseOnly,          # rele os relatorios de build/synth/<Tag> sem rodar o Vivado
     # Programa carregado nas memorias. A sintese otimiza o core PARA ESSE PROGRAMA (a IMEM e
@@ -75,18 +79,19 @@ if ($App -eq 'placa') {
 Set-Content -Path (Join-Path $Out 'app.txt') -Value $App -Encoding ascii
 
 $physOptCmd = if ($PhysOpt) { 'phys_opt_design' } else { '' }
+function Directive([string]$d) { if ($d) { " -directive $d" } else { '' } }
 $impl = if ($SynthOnly) { '' } else { @"
 opt_design
-place_design
+place_design$(Directive $PlaceDirective)
 $physOptCmd
-route_design
+route_design$(Directive $RouteDirective)
 "@ }
 
 $tcl = @"
 set_param general.maxThreads 8
 read_verilog -sv {$($Srcs -join ' ')}
 read_xdc {$($Xdc -replace '\\', '/')}
-synth_design -top $Top -part $Part
+synth_design -top $Top -part $Part$(Directive $SynthDirective)
 $impl
 report_timing_summary -max_paths 10 -file timing.rpt
 report_timing -max_paths 20 -nworst 1 -path_type summary -file paths.rpt
