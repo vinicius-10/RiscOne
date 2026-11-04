@@ -1,5 +1,25 @@
 # Memória de instruções síncrona, comparador de desvio e RAM de dados de 1 KiB
-Data: 2026-11-04 · Status: aprovado
+Data: 2026-11-04 · Status: concluído
+
+**Resultado:** implementado em 5 commits:
+
+| Commit | Mudança |
+| :-- | :-- |
+| `33ca0d7` | memória síncrona |
+| `a2eeef1` | comparador |
+| `93f0599` | RAM de 1 KiB |
+| `6686dd1` | `synth.ps1 -MaxEffort` |
+| `bca8f53` | registrador da instrução no `search` |
+
+Nos 5 commits: 10/10 testbenches e `tb_program` com `selftest` e `autoteste_placa`.
+
+| Medição | Fluxo padrão | `-MaxEffort` |
+| :-- | --: | --: |
+| `ir_search` (RTL final) | −0,228 ns (1 endpoint) | **+0,008 ns: fecha 100 MHz** (WHS +0,353) |
+| base `alu_eq_direto` | −3,470 ns | −3,120 ns |
+
+- **Área:** 1266 LUTs e 98 FFs, contra 1711 LUTs e 67 FFs na base.
+- **Desvio do plano:** o registrador da instrução ficou no `search`, e não dentro da `instruction_memory`. Dentro dela (`rom_style = "distributed"`) deu −0,809 / −0,468 ns; a troca foi decisão do usuário depois da medição. A margem é mínima: na GUI, usar a estratégia `Performance_ExplorePostRoutePhysOpt` com `opt_design` em `ExploreWithRemap` (ver `docs/TIMING.md`).
 
 ## Objetivo e critério de pronto
 

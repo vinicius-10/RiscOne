@@ -42,10 +42,35 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | X3 (protótipo) | placa | X5 + X2 | -1,061 | 90,4 | 1721 | — | 98 | 0 | +2,41 ns |
 | 2026-11-04 | X4 (protótipo) | placa | X5 + X2 + X1 | -0,337 | 96,7 | 1264 | — | 98 | 0 | +3,13 ns; todas as famílias entre −0,34 e −0,04 |
 | 2026-11-04 | X4 + esforço máximo | placa | X4 com a estratégia de `esforco_maximo` | +0,095 | 101,0 | 1276 | — | 98 | 0 | **fecha 100 MHz** (WHS +0,086). Margem pequena; protótipo, não mantido |
+| 2026-11-04 | X4 2 KiB (protótipo) | placa | X4 com a RAM de dados de 2 KiB (512 palavras) | -0,782 | 92,7 | 1462 | 300 | 98 | 0 | entre 1 KiB e 4 KiB; o pior caminho é o próximo PC |
+| 2026-11-04 | X4 2 KiB + esforço máximo | placa | o mesmo com a estratégia de `esforco_maximo` | -0,660 | 93,8 | 1478 | — | 109 | 0 | não fecha; por isso a RAM ficou com 1 KiB (decisão do usuário) |
+| 2026-11-04 | busca_sincrona | placa | RTL das 3 peças (plano `docs/planos/2026-11-04-busca-sincrona-100mhz.md`, commits `33ca0d7`, `a2eeef1`, `93f0599`), com o registrador da instrução **dentro** da `instruction_memory` (`rom_style = "distributed"` para não virar BRAM); programa reinstalado com pilha em `0x400` | -0,809 | 92,5 | 1305 | 172 | 99 | 0 | **substituído** por `ir_search`: ~40 LUTs a mais que o protótipo e pior que ele |
+| 2026-11-04 | busca_sincrona_max | placa | o mesmo com `synth.ps1 -MaxEffort` | -0,468 | 95,5 | 1336 | 172 | 101 | 0 | não fecha (o protótipo, com o registrador no `search`, deu +0,095) |
+| 2026-11-04 | ir_search | placa | registrador da instrução no `search` e ROM combinacional, como no protótipo (commit `bca8f53`) — **estado atual** | -0,228 | 97,8 | 1266 | 172 | 98 | 0 | **mantido**: 1 endpoint violando (TNS −0,228). Pior caminho: laço do próximo PC, 12 níveis, 74% rota |
+| 2026-11-04 | ir_search_max | placa | o mesmo com `synth.ps1 -MaxEffort` | +0,008 | 100,1 | 1272 | 172 | 98 | 0 | **fecha 100 MHz** (WHS +0,353). O route terminou em −0,139 e o `phys_opt` pós-route levou a +0,008. Margem mínima |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Diagnóstico após `ir_search` (04/11/2026)
+
+O RTL fecha 100 MHz só com o fluxo de esforço máximo, e com margem mínima (+0,008 ns). No fluxo padrão falta 0,228 ns num único endpoint. Em relação a `alu_eq_direto` (−3,470), o ganho é de 3,24 ns no fluxo padrão, com 445 LUTs a menos.
+
+- **Piores caminhos:** todos começam no registrador da instrução, dentro do ciclo, e estão a ~0,05 ns uns dos outros. Com esforço máximo, terminam:
+  - no próprio registrador da instrução (laço instrução → leitura do RF → comparador → mux do próximo PC → ROM → registrador);
+  - na escrita do RF (instrução → RF → somador → RAM de dados → write-back).
+- **Rota:** 70–77% do atraso. Não sobra um trecho de lógica dominante.
+- **Onde fica o registrador da instrução:** dentro da `instruction_memory`, o Vivado só evitava a BRAM com `rom_style = "distributed"`. Essa versão saiu com ~40 LUTs a mais e ~0,5 ns pior nos dois fluxos (`busca_sincrona`). Com o registrador no `search`, a ROM continua combinacional (não pode virar BRAM) e o resultado volta ao do protótipo. O valor inicial (palavra 0, para a placa partir sem reset) vem de um `$readmemh` no próprio `search`, e o INIT foi conferido no netlist.
+- **Bitstream na GUI:**
+  - usar a estratégia `Performance_ExplorePostRoutePhysOpt` com `opt_design` em `ExploreWithRemap`; é o que o `-MaxEffort` reproduz;
+  - o fluxo de projeto da GUI pode dar resultado um pouco diferente do script. Com margem de 0,008 ns, o run da GUI pode ficar levemente negativo.
+- **Próximas alavancas, se precisar de margem:**
+  - repetir a implementação com outras diretivas de place (por exemplo, `ExtraTimingOpt`, `AltSpreadLogic_high`);
+  - encurtar o laço do próximo PC:
+    - comparação de igualdade só com LUTs, sem `CARRY4`;
+    - ou ler a ROM com PC+4 e com o destino em paralelo e escolher a palavra pela decisão do desvio. Isso tira o comparador da frente da ROM, mas duplica a ROM (~+700 LUTs);
+  - clock de ~97 MHz via MMCM, se o objetivo for só a placa (último caso, decisão de 04/11).
 
 ## Análise por família de caminho (04/11/2026, RTL de `alu_eq_direto`)
 
@@ -69,7 +94,7 @@ Dispersão física: RAM de dados em X2..30 / Y14..40 (128 SLICEM); ROM e lógica
 2. **Comparador de desvio dedicado** (`rs1` × `rs2`): o próximo PC deixa de esperar a decodificação da ALU. Muda a convenção de desvio por `alu_lsb_o`.
 3. **RAM de dados com 1 KiB:** fanout do endereço 128 em vez de 525 e sem o mux das 4 faixas. Exige profundidade separada para a DMEM e `link.ld` com 1 KiB.
 
-Para virar RTL de verdade falta: valor inicial do registrador de instrução igual à palavra 0 da ROM (a placa roda sem reset), revisar o `tb_instruction_fetch`, atualizar ESPEC/README/CLAUDE.md (convenção de desvio) e o `link.ld`. Mudança de arquitetura da busca: precisa de plano e decisão do usuário.
+As três peças viraram RTL em 04/11/2026 (plano `docs/planos/2026-11-04-busca-sincrona-100mhz.md`); resultado em `ir_search` / `ir_search_max` e no diagnóstico acima.
 
 ## Diagnóstico após `regiao_carry_sel` (04/11/2026)
 
