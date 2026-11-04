@@ -20,9 +20,9 @@ Pronto quando:
 | :-- | :-- | :-- |
 | Tamanho da RAM de dados | 1 KiB (256 palavras, `0x000`–`0x3FF`) | Decisão do usuário (04/11). Única que fechou. WNS no padrão / esforço máximo: 1 KiB −0,337 / +0,095; 2 KiB −0,782 / −0,660; 4 KiB −1,061 (só padrão). Os programas atuais usam ~100 B de dados e ~400 B de pilha (`fib(10)` recursivo). |
 | `alu_lsb_o` e `OP_CMP` na ALU | Remover a porta e o cálculo de igualdade da ALU. `OP_CMP` fica no `alu_pkg` só como seletor do comparador (BEQ/BNE); a ALU devolve 0 para ele | Decisão do usuário (04/11): com o comparador, os dois ficam sem uso (~15 LUTs a menos) |
-| Onde fica o registrador da instrução | Dentro da `instruction_memory`, que passa a ter leitura síncrona (`clk`; `addr_i` = próximo PC) | O nome do módulo descreve a técnica; o `$readmemh` e o valor inicial ficam no mesmo lugar |
-| BRAM | `(* rom_style = "distributed" *)` na ROM | Uma ROM 1024×32 com saída registrada é o molde que o Vivado põe em BRAM, e BRAM está descartada (04/11). Testado: 0 BRAM |
-| Partida sem reset (placa) | A saída registrada nasce com `mem[0]` (`initial`) e o PC nasce 0 (INIT padrão dos FFs) | Mantém `instrução = ROM[PC]` desde a configuração, sem lógica extra. Testado: INIT = `0x00001117` = palavra 0 do `autoteste_placa` |
+| Onde fica o registrador da instrução | ~~Dentro da `instruction_memory` (leitura síncrona, `rom_style = "distributed"`)~~ → **no `search`**, com a `instruction_memory` combinacional lida com o próximo PC (decisão do usuário, 04/11, depois da medição) | Dentro da memória deu −0,809 / −0,468 ns (padrão / esforço máximo); no `search` (como no protótipo) deu −0,228 / +0,008 ns, com ~40–60 LUTs a menos |
+| BRAM | Registrador fora da `instruction_memory`, sem atributo | A ROM continua com leitura combinacional, que não pode virar BRAM. Conferido: 0 BRAM |
+| Partida sem reset (placa) | O registrador da instrução nasce com a palavra 0 (`initial` no `search`, lendo `MEM_FILE`) e o PC nasce 0 (INIT padrão dos FFs) | Mantém `instrução = ROM[PC]` desde a configuração, sem lógica extra. Conferido na síntese: INIT = palavra 0 (`0x40000113` no `autoteste_placa` com pilha em `0x400`) |
 | Reset | Entra no próximo PC (`pc_sel = 0`), não só no registrador do PC | Durante o reset a memória registra `ROM[0]`; ao soltar, PC = 0 e instrução = `ROM[0]` |
 | `pc_write_i = 0` | `pc_sel = PC` | A memória relê a mesma palavra; o invariante continua valendo |
 | Seleção da comparação | Pelo `alu_control_i` que o `control_unit` já gera (`OP_SLT` com sinal, `OP_SLTU` sem sinal, senão igualdade) | Nenhum encoding novo. A seleção fica no fim, em paralelo com a leitura do RF |
@@ -39,8 +39,8 @@ core
 ├── search
 │   ├── pc_sel = reset_i ? 0 : pc_write_i ? (pc_branch_i ? new_pc_i : PC+4) : PC   combinacional (sinal interno novo)
 │   ├── PC <= pc_sel                                                               borda
-│   └── instruction_memory   NOVO clk; addr_i = pc_sel
-│       └── instr_o <= ROM[pc_sel]                                                 borda (registrador NOVO, 32 bits, nasce ROM[0])
+│   ├── instr_o <= ROM[pc_sel]                                                     borda (registrador NOVO, 32 bits, nasce ROM[0])
+│   └── instruction_memory   ROM combinacional; addr_i = pc_sel
 ├── decoder                  sem mudança
 ├── execution
 │   ├── NOVO comparador: rs1 == rs2 | $signed(rs1) < $signed(rs2) | rs1 < rs2, escolhido por alu_control_i
@@ -62,10 +62,8 @@ borda tN+1  PC ← pc_sel e instrução ← ROM[pc_sel]
 
 | Módulo | Porta | Dir | Largura/tipo | Descrição |
 | :-- | :-- | :-- | :-- | :-- |
-| `instruction_memory` | `clk` | in | 1 | **Nova.** Borda em que a instrução é registrada |
-| `instruction_memory` | `addr_i` | in | `[XLEN-1:0]` | Passa a ser o endereço da próxima instrução (`search.pc_sel`) |
-| `instruction_memory` | `instr_o` | out | `[XLEN-1:0]` | Passa a ser registrada: `ROM[addr_i]` da última borda; nasce `ROM[0]` |
-| `search` | — | — | — | Portas iguais; `instr_o` agora sai registrada (instrução do PC atual) |
+| `instruction_memory` | `addr_i` | in | `[XLEN-1:0]` | Passa a ser o endereço da próxima instrução (`search.pc_sel`); a leitura continua combinacional |
+| `search` | — | — | — | Portas iguais; `instr_o` agora sai de um registrador (instrução do PC atual), que nasce `ROM[0]` |
 | `alu` | `alu_lsb_o` | out | 1 | **Removida** |
 | `core` | `MEM_DEPTH` → `INSTR_MEM_DEPTH` | param | `int` | Renomeado; 1024 palavras (4 KiB), como hoje |
 | `core` | `DATA_MEM_DEPTH` | param | `int` | **Novo**; 256 palavras (1 KiB) |
@@ -99,7 +97,7 @@ A ALU deixa de implementar `OP_CMP` (devolve 0). `OP_SLT` e `OP_SLTU` continuam 
 
 **Peça 1: memória síncrona**
 - **`tb_instruction_fetch`:**
-  - O modelo `instruction_memory` do testbench ganha `clk` e passa a registrar `~addr_i`, uma palavra diferente por endereço que nasce `~0`.
+  - O modelo `instruction_memory` do testbench passa a devolver `~addr_i`, uma palavra diferente por endereço. Na primeira versão ele era síncrono, como a memória da época; com o registrador no `search`, voltou a ser combinacional e o teste confere o registrador real.
   - O `check_result` passa a conferir também `instr_o === ~pc_o`, nos casos de reset, sequência, cálculo do desvio, salto, parada e retomada:
     - no cálculo do desvio, a instrução não muda antes da borda;
     - na parada (`pc_write_i = 0`), a memória relê a mesma palavra.
@@ -140,14 +138,14 @@ A ALU deixa de implementar `OP_CMP` (devolve 0). `OP_SLT` e `OP_SLTU` continuam 
 
 | Arquivo | Mudança |
 | :-- | :-- |
-| `sources_1/new/instruction_memory.sv` | Leitura síncrona: `clk`, saída registrada, `initial` com `mem[0]`, `rom_style = "distributed"`; cabeçalho e Doxygen |
-| `sources_1/new/search.sv` | `pc_sel` combinacional (reset, `pc_write_i`, desvio); `PC <= pc_sel`; memória endereçada por `pc_sel`; Doxygen |
+| `sources_1/new/instruction_memory.sv` | Só o Doxygen: o endereço é o próximo PC (depois do desvio do plano, a leitura continua combinacional) |
+| `sources_1/new/search.sv` | `pc_sel` combinacional (reset, `pc_write_i`, desvio); `PC <= pc_sel` e `instr <= ROM[pc_sel]`; valor inicial da instrução lido de `MEM_FILE`; Doxygen |
 | `sources_1/new/execution.sv` | Comparador dedicado; `branch_taken` usa o comparador; sai o `alu_lsb`; Doxygen |
 | `sources_1/new/alu.sv` | Sai `alu_lsb_o` e o `OP_CMP`; Doxygen |
 | `sources_1/new/alu_pkg.sv` | Comentário do `OP_CMP` (seletor do comparador) |
 | `sources_1/new/core.sv` | Parâmetros `INSTR_MEM_DEPTH` e `DATA_MEM_DEPTH`; Doxygen |
 | `sources_1/new/data_memory.sv` | Só o comentário do mapa (exemplo de faixa da RAM) |
-| `sim_1/new/tb_instruction_fetch.sv` | Modelo síncrono com palavra por endereço; confere a instrução; caso de reset no meio |
+| `sim_1/new/tb_instruction_fetch.sv` | Modelo com palavra por endereço (`~addr_i`); confere a instrução registrada; caso de reset no meio |
 | `sim_1/new/tb_execution.sv` | Casos do comparador e aleatório; ajustes do `OP_CMP` |
 | `sim_1/new/tb_alu.sv` | Sem `alu_lsb_o` e sem `OP_CMP` |
 | `sim_1/new/tb_core.sv` | Parâmetro renomeado; fronteiras de 1 KiB; caso do candidato +1; limpeza com `$size` |

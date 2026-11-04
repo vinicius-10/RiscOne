@@ -63,7 +63,7 @@ O script não usa nem altera o `.xpr`. Os runs da GUI (`processador_riscV.runs/`
 | `DSP48E1` | multiplicação; aqui não deveria aparecer (RV32I sem M). |
 
 Caminho típico de um monociclo (todos combinacionais em série num ciclo):
-`instrução registrada (FF da instruction_memory) → decoder/control_unit → register_file (leitura) → muxes A/B → ALU → write_back → register_file (escrita)`; no load, o endereço vem do somador dedicado `rs1 + imm` (`execution.mem_addr_o`): `register_file → somador → data_memory (decodificação de região + leitura) → write_back → register_file`; e o laço do próximo PC `register_file → comparador rs1 × rs2 → branch_taken → mux do próximo PC → ROM da instruction_memory → instrução registrada` (a memória de instruções é síncrona, endereçada pelo próximo PC).
+`instrução registrada (FF do search) → decoder/control_unit → register_file (leitura) → muxes A/B → ALU → write_back → register_file (escrita)`; no load, o endereço vem do somador dedicado `rs1 + imm` (`execution.mem_addr_o`): `register_file → somador → data_memory (decodificação de região + leitura) → write_back → register_file`; e o laço do próximo PC `register_file → comparador rs1 × rs2 → branch_taken → mux do próximo PC → ROM da instruction_memory → instrução registrada` (a ROM é lida com o próximo PC). Não ponha o registrador da instrução dentro da `instruction_memory`: o Vivado vira BRAM, e com `rom_style = "distributed"` ficou ~0,5 ns pior (TIMING.md).
 
 ## Alavancas, da menos para a mais invasiva
 

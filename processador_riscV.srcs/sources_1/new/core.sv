@@ -19,7 +19,7 @@
 // Revision 0.02 - Integracao dos modulos do processador
 // Additional Comments:
 //   O sinal reset_i é encaminhado ao módulo search, que zera o PC de forma
-//   síncrona e faz a memória de instruções registrar a palavra 0. As memorias
+//   síncrona e faz a instrução registrada voltar à palavra 0. As memorias
 //   sao inicializadas pelos arquivos configurados nos
 //   parametros INSTR_MEM_FILE e DATA_MEM_FILE.
 //////////////////////////////////////////////////////////////////////////////////

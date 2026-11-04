@@ -9,7 +9,7 @@
 // Project Name: processador_riscV
 // Target Devices: Artix-7 Nexys A7-100T
 // Tool Versions: vivado 2025.2
-// Description: Testbench de PC e busca com uma memória auxiliar síncrona que devolve uma palavra por endereço.
+// Description: Testbench de PC e busca com uma memória auxiliar que devolve uma palavra por endereço.
 // 
 // Dependencies: search, instruction_memory (modelo auxiliar), opcode_pkg
 // 
@@ -25,10 +25,11 @@
  *
  * Valida reset (no início e no meio da execução), avanços sequenciais de PC,
  * carregamento de destino de desvio e congelamento/retomada do PC pelo sinal
- * `pc_write_i`. A memória auxiliar é síncrona como a real: na borda, registra a
- * palavra do endereço recebido (o próximo PC), e a palavra de cada endereço é
- * `~endereço`. Assim, além do PC e de PC+4, o testbench confere que a instrução
- * entregue é sempre a do PC atual (`instr_o == ~pc_o`).
+ * `pc_write_i`. A memória auxiliar é combinacional como a real e devolve
+ * `~endereço`, uma palavra diferente para cada endereço. O search a lê com o
+ * próximo PC e registra a palavra junto com o PC; assim, além do PC e de PC+4,
+ * o testbench confere que a instrução registrada é sempre a do PC atual
+ * (`instr_o == ~pc_o`).
  *
  * @param clk Clock usado para atualizar o PC e registrar a instrução.
  * @param reset_i Reset do PC, ativo em nivel alto.
@@ -37,7 +38,7 @@
  * @param new_pc_i Endereco de destino aplicado ao caminho de desvio.
  * @retval pc_o Valor atual do contador de programa.
  * @retval pc_next Proximo endereco sequencial, PC+4.
- * @retval instr_o Instrução registrada pelo modelo auxiliar; deve valer `~pc_o`.
+ * @retval instr_o Instrução registrada pelo search; deve valer `~pc_o`.
  *
  */
 
@@ -186,7 +187,7 @@ module tb_instruction_fetch;
         check_result("Retomada Pos-Stall", 32'h0000_0110, 32'h0000_0114);
 
         // --- TESTE 7: Reset no meio da execução ---
-        // O reset entra no próximo PC: na borda, PC = 0 e a memória registra a palavra 0.
+        // O reset entra no próximo PC: na borda, PC = 0 e a instrução registrada é a palavra 0.
         @(negedge clk);
         reset_i = 1'b1;
         check_result("Reset pedido (antes da borda)", 32'h0000_0114, 32'h0000_0118);
@@ -226,27 +227,21 @@ endmodule
 /**
  * @brief Modelo auxiliar de memória usado exclusivamente por tb_instruction_fetch.
  *
- * Substitui a memória real durante este teste. Como a real, é síncrona: na
- * borda de subida registra a palavra do endereço recebido (o próximo PC) e
- * nasce com a palavra do endereço 0. A palavra de cada endereço é `~addr_i`,
- * diferente para cada endereço, para o testbench conferir que a instrução
- * entregue é a do PC atual. O parâmetro MEM_DEPTH é mantido para
- * compatibilidade com a instância da etapa de busca.
+ * Substitui a memória real durante este teste. Como a real, é combinacional. A
+ * palavra de cada endereço é `~addr_i`, diferente para cada endereço, para o
+ * testbench conferir que a instrução registrada pelo search é a do PC atual.
+ * O parâmetro MEM_DEPTH é mantido para compatibilidade com a instância da
+ * etapa de busca.
  *
  * @param MEM_DEPTH Profundidade nominal da memória no módulo search.
- * @param clk Clock da leitura síncrona.
  * @param addr_i Endereço da próxima instrução, vindo do search.
- * @retval instr_o Palavra registrada: `~addr_i` da última borda (nasce `~0`).
+ * @retval instr_o Palavra do endereço: `~addr_i`.
  */
 module instruction_memory #(
     parameter int MEM_DEPTH = 1024
 )(
-    input  logic        clk,
     input  logic [31:0] addr_i,
     output logic [31:0] instr_o
 );
-    // Palavra do endereço 0 na configuração, como a memória real.
-    initial instr_o = ~32'h0;
-
-    always_ff @(posedge clk) instr_o <= ~addr_i;
+    assign instr_o = ~addr_i;
 endmodule

@@ -24,15 +24,20 @@
  * @brief Módulo de busca de instruções do processador RV32I.
  *
  * Mantém o contador de programa (PC), calcula o próximo PC (PC + 4 ou o destino
- * de um desvio) e entrega a instrução do PC atual. O próximo PC (`pc_sel`) vai,
- * na mesma borda, para o registrador do PC e para o endereço da memória de
- * instruções, que tem leitura síncrona. Assim, depois de cada borda, `instr_o`
- * é sempre a instrução do endereço `pc_o`. Continua monociclo (uma instrução
- * por ciclo): a leitura da ROM só passa para o fim do ciclo anterior.
+ * de um desvio) e entrega a instrução do PC atual. O próximo PC (`pc_sel`)
+ * endereça a memória de instruções (ROM combinacional) e, na mesma borda, vai
+ * para o registrador do PC enquanto a palavra lida vai para o registrador da
+ * instrução. Assim, depois de cada borda, `instr_o` é sempre a instrução do
+ * endereço `pc_o`. Continua monociclo (uma instrução por ciclo): a leitura da
+ * ROM só passa para o fim do ciclo anterior.
+ *
+ * Na configuração da FPGA, o PC nasce 0 (valor padrão dos FFs) e o registrador
+ * da instrução nasce com a palavra 0 de `MEM_FILE`, então a placa parte sem
+ * reset.
  *
  * Próximo PC (`pc_sel`):
- * - reset_i = 1 => 0 (o PC zera e a memória registra a palavra 0).
- * - pc_write_i = 0 => o PC atual (a memória relê a mesma palavra).
+ * - reset_i = 1 => 0 (o PC zera e a instrução registrada passa a ser a palavra 0).
+ * - pc_write_i = 0 => o PC atual (a mesma palavra é registrada de novo).
  * - pc_write_i = 1 e pc_branch_i = 0 => PC + 4.
  * - pc_write_i = 1 e pc_branch_i = 1 => new_pc_i.
  *
@@ -65,14 +70,27 @@ module search #(
 );
 
     logic [XLEN-1:0] pc_reg;
-    logic [XLEN-1:0] pc_sel;   // próximo PC: vai para o PC e para a memória de instruções
+    logic [XLEN-1:0] pc_sel;      // próximo PC: vai para o PC e para o endereço da ROM
+    logic [XLEN-1:0] rom_data;    // palavra de pc_sel lida da memória de instruções
+    logic [XLEN-1:0] instr_reg;   // instrução do PC atual, registrada junto com o PC
+
+    // Valor inicial da instrução: a palavra 0 do programa (o PC nasce 0). O
+    // arquivo é lido aqui só para esse valor; a ROM fica na instruction_memory.
+    // O xsim avisa (VRFC 10-2921) por instr_reg ter initial e always_ff: é o
+    // mesmo padrão das saídas MMIO e vira o INIT dos FFs na síntese.
+    logic [XLEN-1:0] rom_init [0:MEM_DEPTH-1];
+    initial begin
+        $readmemh(MEM_FILE, rom_init);
+        instr_reg = rom_init[0];
+    end
 
     // Atribuições combinacionais de saída
     assign pc_o    = pc_reg;
     assign pc_next = pc_reg + 32'd4;
+    assign instr_o = instr_reg;
 
-    // Próximo PC. O reset entra aqui, e não só no registrador, para a memória de
-    // instruções também registrar a palavra do endereço 0.
+    // Próximo PC. O reset entra aqui, e não só no registrador, para a instrução
+    // registrada também voltar à palavra do endereço 0.
     always_comb begin
         if (reset_i)
             pc_sel = '0;
@@ -82,10 +100,11 @@ module search #(
             pc_sel = pc_reg;
     end
 
-    // Atualização sequencial do Contador de Programa (PC); na mesma borda, a
-    // memória de instruções registra a palavra de pc_sel.
+    // Atualização sequencial do Contador de Programa (PC) e da instrução, na
+    // mesma borda.
     always_ff @(posedge clk) begin
-        pc_reg <= pc_sel;
+        pc_reg    <= pc_sel;
+        instr_reg <= rom_data;
     end
 
     instruction_memory #(
@@ -93,9 +112,8 @@ module search #(
         .MEM_DEPTH(MEM_DEPTH),
         .MEM_FILE(MEM_FILE)
     ) instr_mem (
-        .clk     (clk),
         .addr_i  (pc_sel),
-        .instr_o (instr_o)
+        .instr_o (rom_data)
     );
 
 endmodule
