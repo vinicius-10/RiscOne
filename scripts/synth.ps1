@@ -7,6 +7,7 @@
     .\scripts\synth.ps1                       # sintese + place + route, saida em build/synth/atual/
     .\scripts\synth.ps1 -Tag antes_regfile    # guarda numa pasta propria (comparar A/B)
     .\scripts\synth.ps1 -SynthOnly            # so sintese (rapido; timing apenas estimado)
+    .\scripts\synth.ps1 -Tag teste -PhysOpt   # acrescenta phys_opt_design entre place e route
     .\scripts\synth.ps1 -Compare              # tabela com o historico de execucoes
     .\scripts\synth.ps1 -Tag base -ParseOnly  # refaz o resumo de um run existente (sem Vivado)
 
@@ -21,6 +22,7 @@
 param(
     [string]$Tag = 'atual',
     [switch]$SynthOnly,
+    [switch]$PhysOpt,            # roda phys_opt_design depois do place (replicacao de fanout alto)
     [switch]$Compare,
     [switch]$ParseOnly,          # rele os relatorios de build/synth/<Tag> sem rodar o Vivado
     # Programa carregado nas memorias. A sintese otimiza o core PARA ESSE PROGRAMA (a IMEM e
@@ -72,11 +74,13 @@ if ($App -eq 'placa') {
 }
 Set-Content -Path (Join-Path $Out 'app.txt') -Value $App -Encoding ascii
 
-$impl = if ($SynthOnly) { '' } else { @'
+$physOptCmd = if ($PhysOpt) { 'phys_opt_design' } else { '' }
+$impl = if ($SynthOnly) { '' } else { @"
 opt_design
 place_design
+$physOptCmd
 route_design
-'@ }
+"@ }
 
 $tcl = @"
 set_param general.maxThreads 8

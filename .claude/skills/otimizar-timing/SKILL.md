@@ -17,6 +17,7 @@ Alvo padrão: `xc7a100tcsg324-1`, clock de **100 MHz** (`create_clock -period 10
 .\scripts\synth.ps1 -Compare           # histórico (build/synth/historico.csv)
 .\scripts\synth.ps1 -Tag <nome> -ParseOnly   # refaz o resumo de um run existente, sem Vivado
 .\scripts\synth.ps1 -Tag <nome> -App placa   # mede com os .mem da placa em vez do selftest
+.\scripts\synth.ps1 -Tag <nome> -PhysOpt      # acrescenta phys_opt_design entre place e route (alavanca 3)
 .\scripts\run_tb.ps1                   # regressão funcional — obrigatória após cada mudança de RTL
 ```
 (sempre via `powershell -ExecutionPolicy Bypass -File ...`)
