@@ -34,10 +34,42 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | dir_extratiming | placa | só ferramenta: `place_design -directive ExtraTimingOpt` | -3,827 | 72,3 | 1718 | 556 | 67 | 0 | pior. Conclusão da varredura: com este netlist o placer chega a ~−3,47 ns no melhor caso; as diretivas não ajudam |
 | 2026-11-04 | imm_mem | placa | imediato dedicado ao endereço de load/store: `imm_gen.imm_mem_o` = `sext({instr[31:25], instr[5] ? instr[11:7] : instr[24:20]})`, usado no somador `mem_addr_o` e nas flags de região (plano `docs/planos/2026-11-04-imediato-endereco.md`) | -3,614 | 73,5 | 1741 | 556 | 67 | 0 | **revertido** (critério: não piorar nos dois placements). O imediato saiu do caminho; o novo crítico parte do `rs1`: ROM → endereço do register_file (fanout 34) → RAMD32 → somador → RAM |
 | 2026-11-04 | imm_mem_explore | placa | o mesmo RTL com `place`/`route -directive Explore` | -3,626 | 73,4 | 1741 | 556 | 67 | 0 | confirma: ~0,15 ns pior que a base nos dois placements. O `rs1` chega ao somador junto com o imediato; encurtar só o imediato não rende |
+| 2026-11-04 | retiming | placa | só ferramenta: `synth_design -retiming` (Tcl próprio no scratchpad, RTL de `alu_eq_direto`) | -3,470 | 74,2 | 1711 | 556 | 67 | 0 | sem efeito: nenhum registrador movido (netlist idêntico) |
+| 2026-11-04 | esforco_maximo | placa | só ferramenta: `opt_design ExploreWithRemap`, `place Explore`, `phys_opt Explore`, `route Explore` e `phys_opt Explore` pós-route | -3,120 | 76,2 | 1772 | — | 124 | 0 | +0,35 ns. O `phys_opt` pós-route levou o mesmo placement de −3,402 para −3,120: ganho real de ferramenta, não ruído |
+| 2026-11-04 | X1 (protótipo) | placa | RAM de dados com 256 palavras (1 KiB) só na instância da `data_memory` | -3,218 | 75,7 | 1333 | — | 67 | 0 | sozinho, +0,25 ns (ruído); −378 LUTs |
+| 2026-11-04 | X2 (protótipo) | placa | comparador de desvio dedicado (`rs1 == rs2`, `<` com e sem sinal) no lugar de `alu_lsb` | -4,322 | 69,8 | 2012 | — | 76 | 0 | sozinho, pior (+301 LUTs) |
+| 2026-11-04 | X5 (protótipo) | placa | registrador de instrução: a ROM é lida com o próximo PC e a instrução é guardada na mesma borda do PC | -2,159 | 82,2 | 1672 | — | 98 | 0 | +1,31 ns; limitado pelo próximo PC, que ainda espera a decodificação da ALU |
+| 2026-11-04 | X3 (protótipo) | placa | X5 + X2 | -1,061 | 90,4 | 1721 | — | 98 | 0 | +2,41 ns |
+| 2026-11-04 | X4 (protótipo) | placa | X5 + X2 + X1 | -0,337 | 96,7 | 1264 | — | 98 | 0 | +3,13 ns; todas as famílias entre −0,34 e −0,04 |
+| 2026-11-04 | X4 + esforço máximo | placa | X4 com a estratégia de `esforco_maximo` | +0,095 | 101,0 | 1276 | — | 98 | 0 | **fecha 100 MHz** (WHS +0,086). Margem pequena; protótipo, não mantido |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Análise por família de caminho (04/11/2026, RTL de `alu_eq_direto`)
+
+Medido com um Tcl próprio (implementação padrão + `get_timing_paths` agrupado por início/fim). Programa da placa: 390 instruções, então a ROM usa `pc[10:2]` (9 bits) e fica com 3 níveis (LUT6 → MUXF7 → rota → LUT6).
+
+| Família | Pior slack (ns) | Observação |
+| :-- | --: | :-- |
+| load (leitura da RAM → register_file) | −3,470 | 14 níveis, 74% rota |
+| register_file → register_file (passando pela leitura do RF) | −3,311 | o `rs1` chega ao somador quase junto com o imediato |
+| próximo PC (desvios/saltos → PC) | −3,099 | 20 níveis: a comparação espera ~2,9 ns de decodificação da operação da ALU (subtração/seleção do operando B, fanout 104) |
+| store (→ WE da RAM) | −2,547 | |
+| MMIO (→ CE das saídas) | −1,797 | |
+
+Orçamento do pior load, a partir da borda do clock: PC (fanout 191) + ROM até o bit de instrução 3,34 ns; distribuição + decodificação do imediato 2,38 ns; somador 0,73 ns; rota do endereço até as 512 células da RAM (fanout 525) 1,92 ns; RAMS64E + F7 + F8 0,65 ns; rota até a primeira LUT 1,23 ns; 4 LUTs (faixa, região, byte/sinal, write-back) 2,89 ns.
+
+Dispersão física: RAM de dados em X2..30 / Y14..40 (128 SLICEM); ROM e lógica absorvida no `search` em X5..28 / Y13..59. Uso de RAM pelos programas atuais: ~100 B estáticos (`autoteste_placa`) e pilha com quadros de no máximo 64 B.
+
+**Conclusão:** as três famílias principais estão a 0,4 ns uma da outra, então nenhuma mudança local isolada move o WNS. O trecho comum é o PC → ROM (3,3 ns). Os protótipos X1–X5 (tabela do histórico; diffs guardados fora do repositório) mostram três peças que só rendem juntas:
+
+1. **Registrador de instrução:** a ROM é lida com o próximo PC e a instrução fica num registrador carregado na mesma borda do PC. Continua monociclo (uma instrução por ciclo, sem estágios, sem hazards); só muda onde fica o registrador da busca. Tira a ROM do início de todos os caminhos e a põe no fim do caminho do próximo PC.
+2. **Comparador de desvio dedicado** (`rs1` × `rs2`): o próximo PC deixa de esperar a decodificação da ALU. Muda a convenção de desvio por `alu_lsb_o`.
+3. **RAM de dados com 1 KiB:** fanout do endereço 128 em vez de 525 e sem o mux das 4 faixas. Exige profundidade separada para a DMEM e `link.ld` com 1 KiB.
+
+Para virar RTL de verdade falta: valor inicial do registrador de instrução igual à palavra 0 da ROM (a placa roda sem reset), revisar o `tb_instruction_fetch`, atualizar ESPEC/README/CLAUDE.md (convenção de desvio) e o `link.ld`. Mudança de arquitetura da busca: precisa de plano e decisão do usuário.
 
 ## Diagnóstico após `regiao_carry_sel` (04/11/2026)
 
