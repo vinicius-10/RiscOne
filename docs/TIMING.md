@@ -21,10 +21,19 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-03 | mmio_generico | placa | E/S genérica: 4 saídas + 4 entradas de 32 bits, saídas com leitura de volta (plano `docs/planos/2026-11-03-mmio-generico.md`) | -5,083 | 66,3 | 1798 | 556 | 195 | 0 | **−0,9 ns**: mesmo caminho (PC → IMEM → imm → somador → decodificação de região → RF), 21 níveis; lógica igual (3,9 ns), roteamento +1,2 ns. Os 128 FFs das saídas não podem ser podados porque são lidos de volta |
 | 2026-11-03 | mmio_sem_leitura | placa | experimento (worktree): `mmio_generico` com leitura das saídas devolvendo 0 | -4,259 | 70,1 | 1674 | 556 | 67 | 0 | igual à base dentro do ruído: o custo de `mmio_generico` vem da leitura de volta das saídas de 32 bits |
 | 2026-11-03 | mmio_somente_escrita | placa | versão final: E/S genérica com saídas somente escrita (mesma lógica do experimento; só muda a ordem dos itens do `case`) | -4,724 | 67,9 | 1676 | 556 | 67 | 0 | **mantido** (decisão do usuário): −125 LUTs e −32 FFs em relação à base. A diferença de 0,47 ns para `mmio_sem_leitura`, com netlist quase idêntico, é variação de placement: o ruído real para pequenas mudanças de netlist é de ~0,5 ns |
+| 2026-11-04 | regiao_carry_sel | placa | flags de região (`addr[31:28] == 4`, `addr[31:12] == 0`) calculadas na `execution` sem esperar o carry: candidatos `rs1[31:12]` −1/0/+1 escolhidos por `imm[11]` e pelo carry do bit 11 (plano `docs/planos/2026-11-04-regiao-sem-carry.md`) | -3,656 | 73,2 | 1826 | 556 | 67 | 0 | **mantido** (+1,07 ns, +150 LUTs). A decodificação saiu do caminho crítico; agora empatam a leitura da LUTRAM e a ALU (ver diagnóstico abaixo) |
+| 2026-11-04 | regiao_rasa_teto | placa | experimento (worktree, não mantido): decodificação mínima, MMIO = `addr[30]` e leitura da RAM sem checar `addr < 4 KiB` | -4,618 | 68,4 | 1727 | 556 | 68 | 0 | **pior que `regiao_carry_sel`**: o caminho crítico também é a leitura da LUTRAM (18 níveis, contra 16 na (a)). Simplificar o mapa não traz ganho adicional |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Diagnóstico após `regiao_carry_sel` (04/11/2026)
+
+- **Caminho crítico (load, −3,656 ns):** PC → IMEM (3 níveis) → imediato → 2 CARRY4 do somador `rs1 + imm` → `addr[11:2]` da LUTRAM (**fanout 516**, 1,6 ns de rota) → RAMS64E + MUXF7/MUXF8 → seleção de byte/sinal → write-back → register_file. 13,4 ns, 16 níveis, 72% roteamento.
+- **Empatado (−3,598 ns):** caminho da ALU: IMEM → mux de operando → 8 CARRY4 (ADD/SLT de 32 bits) → mux de resultado → mux do PC/write-back → register_file. 22 níveis.
+- O teto `regiao_rasa_teto` (decodificação mínima) não passou de −4,6 ns, então mexer mais na decodificação de região não rende.
+- Próximas alavancas, uma de cada vez: reduzir o fanout de `addr[11:2]` (a LUTRAM de 4 KiB são 512 células RAMS64E lendo o mesmo endereço) ou o mux de leitura (MUXF7/F8 + byte/sinal); encurtar a ALU (comparador SLT/SLTU dedicado ou mux de resultado mais raso); opções de ferramenta (`phys_opt_design`, `Explore`). Para 100 MHz: pipeline ou MMCM.
 
 ## Diagnóstico após `dmem_lutram` (03/11/2026)
 
