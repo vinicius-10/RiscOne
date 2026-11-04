@@ -341,6 +341,22 @@ module tb_core;
         reg_op("lb   x25, 31(x12) (in3[31:24])", enc_i(LD, 31, 12, 3'b000, 25), 25,
                {{24{IN3[31]}}, IN3[31:24]});
 
+        // ---------------- Imediato cruzando fronteiras de regiao ----------------
+        // A regiao (RAM/MMIO/fora) depende de rs1 + imm, nao so de rs1. Os
+        // enderecos "fora" foram escolhidos para ler um valor diferente de 0 se
+        // fossem decodificados pela regiao de rs1 (RAM palavra 0 / MMIO in0).
+        add("sw   x13, 0(x0) -> RAM 0x0",  enc_s(0, 13, 0, 3'b010), K_MEM, 0, 32'h05A5, 32'h0);
+        reg_op("lui  x26, 0x1",            enc_u(LUI, 20'h00001, 26), 26, 32'h1000);
+        add("sw   x13, -4(x26) -> RAM 0xFFC", enc_s(-4, 13, 26, 3'b010), K_MEM, 0, 32'h05A5, 32'hFFC);
+        reg_op("lw   x27, -4(x26) (RAM 0xFFC)", enc_i(LD, -4, 26, 3'b010, 27), 27, 32'h05A5);
+        reg_op("addi x28, x26, -4 (0xFFC)", enc_i(OPI, -4, 26, 3'b000, 28), 28, 32'hFFC);
+        reg_op("lw   x29, 4(x28) (0x1000, fora: le 0)", enc_i(LD, 4, 28, 3'b010, 29), 29, 32'h0);
+        reg_op("addi x28, x12, -16 (0x3FFFFFF0)", enc_i(OPI, -16, 12, 3'b000, 28), 28, 32'h3FFF_FFF0);
+        reg_op("lw   x29, 32(x28) (-> in0)", enc_i(LD, 32, 28, 3'b010, 29), 29, IN0);
+        add("sw   x13, 16(x28) -> out0",   enc_s(16, 13, 28, 3'b010), K_OUT0, 0, 32'h05A5);
+        reg_op("lw   x27, -2032(x12) (0x3FFFF810, fora: le 0)",
+               enc_i(LD, -2032, 12, 3'b010, 27), 27, 32'h0);
+
         // ---------------- Instrucoes nao suportadas / invalidas ----------------
         add("ecall (NOP)", ECALL, K_NONE);
         add("fence (NOP)", FENCE, K_NONE);

@@ -41,6 +41,9 @@
  * @retval pc_branch_o Endereco de desvio observado.
  * @retval alu_result_o Resultado da ALU observado.
  * @retval branch_taken_o Indicador de desvio tomado observado.
+ * @retval mem_addr_o Endereco de load/store observado (rs1 + imm).
+ * @retval mem_io_o Flag de MMIO observada (endereco em 0x4xxx_xxxx).
+ * @retval mem_page0_o Flag dos primeiros 4 KiB observada (addr[31:12] == 0).
  */
 import alu_pkg::*;
 import branch_pkg::*;
@@ -74,6 +77,8 @@ module tb_execution;
     logic [XLEN-1:0]   alu_result_o;
     logic              branch_taken_o;
     logic [XLEN-1:0]   mem_addr_o;
+    logic              mem_io_o;
+    logic              mem_page0_o;
 
     // Controladora de falhas interna
     integer fail_count = 0;
@@ -97,7 +102,9 @@ module tb_execution;
         .pc_branch_o     (pc_branch_o),
         .alu_result_o    (alu_result_o),
         .branch_taken_o  (branch_taken_o),
-        .mem_addr_o      (mem_addr_o)
+        .mem_addr_o      (mem_addr_o),
+        .mem_io_o        (mem_io_o),
+        .mem_page0_o     (mem_page0_o)
     );
     import alu_pkg::*;
     import branch_pkg::*;
@@ -151,6 +158,37 @@ module tb_execution;
                 $display("[FAIL] Teste %02d: %-42s", test_num, test_name);
                 $display("       MEM_ADDR -> Obtido: 0x%08h | Esperado: 0x%08h \n",
                          mem_addr_o, expected_mem_addr);
+                fail_count++;
+            end
+        end
+    endtask
+
+    // Aplica rs1 e um imediato de 12 bits (estendido como em load/store) e
+    // confere o endereco e as flags de regiao contra os valores esperados.
+    task automatic check_mem_region(
+        input int              test_num,
+        input string           test_name,
+        input logic [XLEN-1:0] rs1,
+        input logic [11:0]     imm12,
+        input logic [XLEN-1:0] expected_mem_addr,
+        input logic            expected_io,
+        input logic            expected_page0
+    );
+        begin
+            @(negedge clk);
+            reg_data1_i = rs1;
+            imm_i       = {{20{imm12[11]}}, imm12};
+            #1;
+            if (mem_addr_o === expected_mem_addr && mem_io_o === expected_io &&
+                mem_page0_o === expected_page0) begin
+                $display("[PASS] Teste %02d: %-50s | MEM_ADDR: 0x%08h | IO: %0b | PAGE0: %0b",
+                         test_num, test_name, mem_addr_o, mem_io_o, mem_page0_o);
+            end else begin
+                $display("[FAIL] Teste %02d: %-42s", test_num, test_name);
+                $display("       MEM_ADDR -> Obtido: 0x%08h | Esperado: 0x%08h",
+                         mem_addr_o, expected_mem_addr);
+                $display("       IO/PAGE0 -> Obtido: %0b/%0b | Esperado: %0b/%0b \n",
+                         mem_io_o, mem_page0_o, expected_io, expected_page0);
                 fail_count++;
             end
         end
@@ -661,7 +699,73 @@ module tb_execution;
         control_alu_b    = 2'b00;
         check_mem_addr(38, "MEM_ADDR: 0xFFFFFFF8 + 0x10 (wrap)", 32'h0000_0008);
 
-        
+        // ---------------------------------------------------------------------
+        // SEÇÃO 6: FLAGS DE REGIÃO (mem_io_o, mem_page0_o)
+        // Calculadas sem esperar o carry do somador; o imediato cruza as
+        // fronteiras RAM/fora/MMIO nos dois sentidos.
+        // ---------------------------------------------------------------------
+        check_mem_region(39, "REGIAO: 0xFFC + 4 -> 0x1000 (fora)",
+                         32'h0000_0FFC, 12'h004, 32'h0000_1000, 1'b0, 1'b0);
+        check_mem_region(40, "REGIAO: 0x1000 - 4 -> 0xFFC (RAM)",
+                         32'h0000_1000, 12'hFFC, 32'h0000_0FFC, 1'b0, 1'b1);
+        check_mem_region(41, "REGIAO: 0xFFFFFFFC + 4 -> 0 (RAM, estouro)",
+                         32'hFFFF_FFFC, 12'h004, 32'h0000_0000, 1'b0, 1'b1);
+        check_mem_region(42, "REGIAO: 0 - 4 -> 0xFFFFFFFC (fora)",
+                         32'h0000_0000, 12'hFFC, 32'hFFFF_FFFC, 1'b0, 1'b0);
+        check_mem_region(43, "REGIAO: 0x3FFFFFF0 + 0x10 -> MMIO",
+                         32'h3FFF_FFF0, 12'h010, 32'h4000_0000, 1'b1, 1'b0);
+        check_mem_region(44, "REGIAO: 0x40000000 - 4 -> 0x3FFFFFFC (fora)",
+                         32'h4000_0000, 12'hFFC, 32'h3FFF_FFFC, 1'b0, 1'b0);
+        check_mem_region(45, "REGIAO: 0x4FFFFFFC + 4 -> 0x50000000 (fora)",
+                         32'h4FFF_FFFC, 12'h004, 32'h5000_0000, 1'b0, 1'b0);
+        check_mem_region(46, "REGIAO: 0x50000004 - 8 -> 0x4FFFFFFC (MMIO)",
+                         32'h5000_0004, 12'hFF8, 32'h4FFF_FFFC, 1'b1, 1'b0);
+        check_mem_region(47, "REGIAO: 0x40000010 + 0x7FF (MMIO)",
+                         32'h4000_0010, 12'h7FF, 32'h4000_080F, 1'b1, 1'b0);
+        check_mem_region(48, "REGIAO: 0x800 - 0x800 -> 0 (RAM)",
+                         32'h0000_0800, 12'h800, 32'h0000_0000, 1'b0, 1'b1);
+
+        // TESTE 49: vetores aleatórios contra a referência rs1 + sext(imm),
+        // com rs1[31:12] concentrado nas fronteiras de região.
+        begin
+            logic [19:0]     hi_borda [7];
+            logic [XLEN-1:0] rs1, addr;
+            logic [11:0]     imm12;
+            logic            ref_io, ref_page0;
+            int              erros;
+
+            hi_borda = '{20'h00000, 20'h00001, 20'hFFFFF, 20'h3FFFF,
+                         20'h40000, 20'h4FFFF, 20'h50000};
+            erros    = 0;
+            for (int n = 0; n < 5000; n++) begin
+                rs1   = $urandom;
+                if (n % 2 == 0) rs1[31:12] = hi_borda[$urandom_range(6)];
+                imm12 = $urandom;
+                addr  = rs1 + {{20{imm12[11]}}, imm12};
+                ref_io    = (addr[31:28] == 4'h4);
+                ref_page0 = (addr[31:12] == 20'h0);
+
+                @(negedge clk);
+                reg_data1_i = rs1;
+                imm_i       = {{20{imm12[11]}}, imm12};
+                #1;
+                if (mem_addr_o !== addr || mem_io_o !== ref_io || mem_page0_o !== ref_page0) begin
+                    if (erros < 5)
+                        $display("       rs1=0x%08h imm=0x%03h -> addr 0x%08h io/page0 %0b/%0b (esperado 0x%08h %0b/%0b)",
+                                 rs1, imm12, mem_addr_o, mem_io_o, mem_page0_o, addr, ref_io, ref_page0);
+                    erros++;
+                end
+            end
+
+            if (erros == 0) begin
+                $display("[PASS] Teste 49: %-50s | 5000 vetores", "REGIAO: aleatorio contra rs1 + sext(imm)");
+            end else begin
+                $display("[FAIL] Teste 49: REGIAO: aleatorio contra rs1 + sext(imm) | %0d erros", erros);
+                fail_count++;
+            end
+        end
+
+
         // =========================================================================
         // 6. RELATÓRIO FINAL
         // =========================================================================

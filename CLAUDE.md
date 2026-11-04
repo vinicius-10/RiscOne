@@ -83,7 +83,8 @@ top_core          board pins -> core; inverts active-low CPU_RESETN into core.re
 └── core          wires the datapath; params XLEN, MEM_DEPTH, *_MEM_FILE
     ├── search ── instruction_memory   PC register, PC+4 vs branch target mux
     ├── decoder   register_file + imm_gen + control_unit
-    ├── execution ── alu               operand muxes, branch decision + target, dedicated rs1+imm adder -> data_memory address
+    ├── execution ── alu               operand muxes, branch decision + target, dedicated rs1+imm adder -> data_memory address,
+    │                                  region flags (MMIO / first 4 KiB) computed without waiting for the adder carry
     ├── data_memory                    byte-addressable RAM + MMIO peripherals
     └── write_back                     ALU result vs memory data
 ```

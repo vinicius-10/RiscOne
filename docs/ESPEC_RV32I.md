@@ -158,9 +158,9 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
 | `imm_gen` | `instruction_i` | `imm_o` | §4 |
 | `control_unit` | `instruction_i` | §5.1 | §5 |
-| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o` | §5.2; `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B) |
+| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o`, `mem_io_o`, `mem_page0_o` | §5.2; `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B); `mem_io_o` = `mem_addr_o[31:28] == 4`, `mem_page0_o` = `mem_addr_o[31:12] == 0`, calculadas sem esperar o somador e exatas só com imediato de 12 bits (load/store; §9) |
 | `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o`, `alu_lsb_o` | §6 |
-| `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `data_i`, `io_in0_i` … `io_in3_i` (32 bits) | `data_o`, `io_out0_o` … `io_out3_o` (32 bits) | §9 |
+| `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `addr_io_i`, `addr_page0_i`, `data_i`, `io_in0_i` … `io_in3_i` (32 bits) | `data_o`, `io_out0_o` … `io_out3_o` (32 bits) | §9 |
 | `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
 
 ## 8. Ligações entre os blocos (`core`)
@@ -182,6 +182,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `pc_branch` | `execution.pc_branch_o` | `search.new_pc_i` |
 | `alu_result` | `execution.alu_result_o` | `write_back.alu_result_i` |
 | `data_memory_addr` (rs1 + imm) | `execution.mem_addr_o` | `data_memory.addr_i` |
+| `data_memory_addr_io` / `data_memory_addr_page0` | `execution.mem_io_o` / `mem_page0_o` | `data_memory.addr_io_i` / `addr_page0_i` |
 | `data_memory_write_enable`, `_width`, `_signed` | `decoder.data_memory_mem_*_o` | `data_memory.mem_write_i`, `mem_width_i`, `mem_signed_i` |
 | `data_memory_data` | `data_memory.data_o` | `write_back.mem_data_i` |
 | `mem_to_reg` | `decoder.write_back_mem_to_reg_o` | `write_back.mem_to_reg_i` |
@@ -205,6 +206,12 @@ PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► executi
   (SB: `0001 << addr[1:0]`; SH: `0011`/`1100` por `addr[1]`; SW: `1111`).
 - Loads: escolhe byte por `addr[1:0]` ou half por `addr[1]` e estende conforme `mem_signed_i`.
 - Endereço fora da RAM (e fora do MMIO) lê 0 e ignora escrita.
+- Decodificação de região: as comparações dos bits altos chegam prontas da `execution`
+  (`addr_io_i` = `addr[31:28] == 4'h4`, `addr_page0_i` = `addr[31:12] == 0`). Com imediato de
+  12 bits, `addr[31:12]` só pode ser `rs1[31:12]` − 1, + 0 ou + 1 (escolhido por `imm[11]` e pelo
+  carry do bit 11), então as flags não esperam o carry chegar ao bit 31. RAM válida =
+  `addr_page0_i && addr[11:0] < MEM_DEPTH*4`; por isso `MEM_DEPTH*4` não pode passar de 4096
+  (erro de elaboração).
 - MMIO: `addr[31:28] == 4'h4`, registrador escolhido por `addr[5:2]`. Mesmas lanes de byte e
   extensão de sinal da RAM.
 - 4 saídas e 4 entradas genéricas de 32 bits; o que cada uma liga na placa é definido no

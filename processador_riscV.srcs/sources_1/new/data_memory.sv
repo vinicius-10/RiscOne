@@ -28,6 +28,10 @@
  * quatro entradas genericas de 32 bits; o significado de cada uma na placa e
  * definido no top_core.
  *
+ * @param addr_io_i Endereco no espaco de MMIO (addr_i[31:28] == 4'h4),
+ *                  calculado pela execution sem esperar o somador.
+ * @param addr_page0_i Endereco nos primeiros 4 KiB (addr_i[31:12] == 0),
+ *                     idem. Por isso MEM_DEPTH*4 nao pode passar de 4096.
  * @param io_in0_i..io_in3_i Entradas genericas, lidas em 0x4000_0010 + 4k
  *                           (escrita ignorada).
  * @retval io_out0_o..io_out3_o Registradores de saida, escritos (por faixa de
@@ -47,6 +51,8 @@ module data_memory
     input  mem_width_t       mem_width_i,
     input  mem_signed_t      mem_signed_i,
     input  logic [XLEN-1:0]  addr_i,
+    input  logic             addr_io_i,
+    input  logic             addr_page0_i,
     input  logic [XLEN-1:0]  data_i,
     output logic [XLEN-1:0]  data_o,
     
@@ -79,11 +85,18 @@ module data_memory
 
     localparam int ADDR_WIDTH = $clog2(MEM_DEPTH);
 
+    // addr_page0_i so cobre os primeiros 4 KiB.
+    if (MEM_DEPTH * 4 > 4096) begin : g_mem_depth_check
+        $error("data_memory: MEM_DEPTH*4 (%0d) passa de 4096, limite de addr_page0_i", MEM_DEPTH * 4);
+    end
+
     // =========================================================================
-    // DECODIFICAÇÃO DE ENDEREÇOS (Otimizada para Caminho Crítico)
+    // DECODIFICAÇÃO DE ENDEREÇOS
     // Mapeamento:
     //   - 0x0000_0000 até MEM_DEPTH*4-1 (0x0000_0FFF com MEM_DEPTH = 1024) -> RAM Interna
-    //   - 0x4000_0000 em diante      -> Espaço de I/O (MMIO)
+    //   - 0x4xxx_xxxx                -> Espaço de I/O (MMIO)
+    // As comparações dos bits altos vêm prontas da execution (addr_io_i,
+    // addr_page0_i), sem esperar o carry do somador de endereço.
     // =========================================================================
     logic                  is_io_space;
     logic                  ram_addr_valid;
@@ -91,8 +104,8 @@ module data_memory
     logic [ADDR_WIDTH-1:0] word_addr;
     logic [1:0]            byte_offset;
 
-    assign is_io_space = (addr_i[31:28] == 4'h4);
-    assign ram_addr_valid = (addr_i < (MEM_DEPTH * 4));
+    assign is_io_space    = addr_io_i;
+    assign ram_addr_valid = addr_page0_i && (addr_i[11:0] < (MEM_DEPTH * 4));
     assign io_offset   = addr_i[5:2]; // Offset do registrador no bloco de I/O
     assign word_addr   = addr_i[ADDR_WIDTH+1:2];
     assign byte_offset = addr_i[1:0];

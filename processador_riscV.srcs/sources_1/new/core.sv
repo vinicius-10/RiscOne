@@ -89,6 +89,8 @@ module core #(
     logic [XLEN-1:0] data_memory_data;
     logic [XLEN-1:0] alu_result;
     logic [XLEN-1:0] data_memory_addr;
+    logic            data_memory_addr_io;     // endereco no MMIO (sem esperar o somador)
+    logic            data_memory_addr_page0;  // endereco nos primeiros 4 KiB (idem)
     logic [XLEN-1:0] write_back_data;
     logic            pc_write_enable;
     logic            branch_taken;
@@ -152,7 +154,9 @@ module core #(
         .pc_branch_o     (pc_branch),
         .alu_result_o    (alu_result),
         .branch_taken_o  (branch_taken),
-        .mem_addr_o      (data_memory_addr)
+        .mem_addr_o      (data_memory_addr),
+        .mem_io_o        (data_memory_addr_io),
+        .mem_page0_o     (data_memory_addr_page0)
     );
 
     data_memory #(
@@ -165,6 +169,8 @@ module core #(
         .mem_width_i (data_memory_width),
         .mem_signed_i(data_memory_signed),
         .addr_i      (data_memory_addr),
+        .addr_io_i   (data_memory_addr_io),
+        .addr_page0_i(data_memory_addr_page0),
         .data_i      (rs2_data),
         .data_o      (data_memory_data),
         .io_in0_i    (io_in0_i),
