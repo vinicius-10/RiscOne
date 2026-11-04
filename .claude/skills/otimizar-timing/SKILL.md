@@ -19,6 +19,10 @@ Alvo padrão: `xc7a100tcsg324-1`, clock de **100 MHz** (`create_clock -period 10
 .\scripts\synth.ps1 -Tag <nome> -App placa   # mede com os .mem da placa em vez do selftest
 .\scripts\synth.ps1 -Tag <nome> -PhysOpt      # acrescenta phys_opt_design entre place e route (alavanca 3)
 .\scripts\synth.ps1 -Tag <nome> -SynthDirective X -PlaceDirective Y -RouteDirective Z   # diretivas (alavanca 3)
+.\scripts\synth.ps1 -Tag <nome> -App placa -MaxEffort   # esforço máximo: opt ExploreWithRemap, place/phys_opt/route
+                                       # Explore e phys_opt depois do route (= Performance_ExplorePostRoutePhysOpt
+                                       # da GUI com opt_design ExploreWithRemap). É o fluxo do bitstream a 100 MHz:
+                                       # meça sempre nos dois fluxos (padrão e -MaxEffort)
 .\scripts\run_tb.ps1                   # regressão funcional — obrigatória após cada mudança de RTL
 ```
 (sempre via `powershell -ExecutionPolicy Bypass -File ...`)

@@ -9,6 +9,8 @@
     .\scripts\synth.ps1 -SynthOnly            # so sintese (rapido; timing apenas estimado)
     .\scripts\synth.ps1 -Tag teste -PhysOpt   # acrescenta phys_opt_design entre place e route
     .\scripts\synth.ps1 -Tag teste -PlaceDirective Explore -RouteDirective Explore   # diretivas da ferramenta
+    .\scripts\synth.ps1 -Tag teste -MaxEffort # esforco maximo (= estrategia Performance_ExplorePostRoutePhysOpt
+                                              #   da GUI com opt_design ExploreWithRemap)
     .\scripts\synth.ps1 -Compare              # tabela com o historico de execucoes
     .\scripts\synth.ps1 -Tag base -ParseOnly  # refaz o resumo de um run existente (sem Vivado)
 
@@ -27,6 +29,7 @@ param(
     [string]$SynthDirective = '', # -directive do synth_design (ex.: PerformanceOptimized)
     [string]$PlaceDirective = '', # -directive do place_design (ex.: Explore, ExtraTimingOpt)
     [string]$RouteDirective = '', # -directive do route_design (ex.: Explore)
+    [switch]$MaxEffort,          # opt ExploreWithRemap, place/phys_opt/route Explore e phys_opt depois do route
     [switch]$Compare,
     [switch]$ParseOnly,          # rele os relatorios de build/synth/<Tag> sem rodar o Vivado
     # Programa carregado nas memorias. A sintese otimiza o core PARA ESSE PROGRAMA (a IMEM e
@@ -78,13 +81,24 @@ if ($App -eq 'placa') {
 }
 Set-Content -Path (Join-Path $Out 'app.txt') -Value $App -Encoding ascii
 
-$physOptCmd = if ($PhysOpt) { 'phys_opt_design' } else { '' }
+# Esforco maximo: o phys_opt depois do route e o que mais rende (replica e reposiciona
+# celulas dos caminhos criticos ja roteados).
+$optDirective = ''
+$postRoutePhysOpt = ''
+if ($MaxEffort) {
+    $optDirective = 'ExploreWithRemap'
+    if (-not $PlaceDirective) { $PlaceDirective = 'Explore' }
+    if (-not $RouteDirective) { $RouteDirective = 'Explore' }
+    $postRoutePhysOpt = 'phys_opt_design -directive Explore'
+}
+$physOptCmd = if ($MaxEffort) { 'phys_opt_design -directive Explore' } elseif ($PhysOpt) { 'phys_opt_design' } else { '' }
 function Directive([string]$d) { if ($d) { " -directive $d" } else { '' } }
 $impl = if ($SynthOnly) { '' } else { @"
-opt_design
+opt_design$(Directive $optDirective)
 place_design$(Directive $PlaceDirective)
 $physOptCmd
 route_design$(Directive $RouteDirective)
+$postRoutePhysOpt
 "@ }
 
 $tcl = @"
@@ -114,7 +128,10 @@ if (-not $p.WaitForExit($TimeoutMin * 60 * 1000)) {
 }
 }
 $sw.Stop()
-if ($ParseOnly) { $SynthOnly = -not (Select-String -Path (Join-Path $Out 'run.tcl') -Pattern 'route_design' -Quiet) }
+if ($ParseOnly) {
+    $SynthOnly = -not (Select-String -Path (Join-Path $Out 'run.tcl') -Pattern 'route_design' -Quiet)
+    $MaxEffort = [bool](Select-String -Path (Join-Path $Out 'run.tcl') -Pattern 'ExploreWithRemap' -Quiet)
+}
 
 $log = Get-Content (Join-Path $Out 'vivado.log') -ErrorAction SilentlyContinue
 $timingFile = Join-Path $Out 'timing.rpt'
@@ -181,7 +198,7 @@ if (Test-Path $methFile) {
 }
 
 # ---- resumo -------------------------------------------------------------------------
-$etapaRpt = if ($SynthOnly) { 'pos-sintese (estimativa, sem roteamento)' } else { 'pos-roteamento' }
+$etapaRpt = if ($SynthOnly) { 'pos-sintese (estimativa, sem roteamento)' } elseif ($MaxEffort) { 'pos-roteamento, esforco maximo' } else { 'pos-roteamento' }
 $r = New-Object System.Collections.Generic.List[string]
 $appUsed = if (Test-Path (Join-Path $Out 'app.txt')) { (Get-Content (Join-Path $Out 'app.txt')).Trim() } else { 'placa' }
 $r.Add("Tag: $Tag  |  programa: $appUsed  |  $etapaRpt  |  $([math]::Round($sw.Elapsed.TotalMinutes,1)) min")
@@ -211,7 +228,7 @@ $r | ForEach-Object { Write-Host $_ }
 
 # ---- historico ------------------------------------------------------------------------
 $row = [pscustomobject]@{
-    Data = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Tag = $Tag; Programa = $appUsed; Etapa =$(if ($SynthOnly) { 'synth' } else { 'route' })
+    Data = (Get-Date -Format 'yyyy-MM-dd HH:mm'); Tag = $Tag; Programa = $appUsed; Etapa =$(if ($SynthOnly) { 'synth' } elseif ($MaxEffort) { 'route-max' } else { 'route' })
     WNS = $wns; TNS = $tns; Fmax_MHz = $fmax; LUTs = $luts; FFs = $ffs; BRAM = $bram; DSP = $dsp; Latches = $latches.Count
 }
 $row | Export-Csv -Path $Hist -Append -NoTypeInformation -Encoding UTF8
