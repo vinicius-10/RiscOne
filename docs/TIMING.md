@@ -48,6 +48,10 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | busca_sincrona_max | placa | o mesmo com `synth.ps1 -MaxEffort` | -0,468 | 95,5 | 1336 | 172 | 101 | 0 | não fecha (o protótipo, com o registrador no `search`, deu +0,095) |
 | 2026-11-04 | ir_search | placa | registrador da instrução no `search` e ROM combinacional, como no protótipo (commit `bca8f53`) — **estado atual** | -0,228 | 97,8 | 1266 | 172 | 98 | 0 | **mantido**: 1 endpoint violando (TNS −0,228). Pior caminho: laço do próximo PC, 12 níveis, 74% rota |
 | 2026-11-04 | ir_search_max | placa | o mesmo com `synth.ps1 -MaxEffort` | +0,008 | 100,1 | 1272 | 172 | 98 | 0 | **fecha 100 MHz** (WHS +0,353). O route terminou em −0,139 e o `phys_opt` pós-route levou a +0,008. Margem mínima |
+| 2026-11-04 | E2 (experimento) | placa | `(* max_fanout = 20 *)` no registrador da instrução (`search`), para encurtar a rota instrução → endereço do RF (fanout 69) | -0,695 | 93,5 | 1313 | 172 | 132 | 0 | **pior** nos dois fluxos (máximo −0,382): +34 FFs replicados e placement pior, como a replicação do PC (`fanout_pc50`) |
+| 2026-11-04 | E4 (experimento) | placa | `(* max_fanout = 48 *)` no próximo PC (`pc_sel`, fanout 181 na ROM) | -0,160 | 98,4 | 1270 | 172 | 99 | 0 | ruído no padrão e **pior** no máximo (−0,178). Revertido |
+| 2026-11-04 | E3 (experimento) | placa | decisão de desvio mais rasa: um comparador "menor" (com sinal = sem sinal com o bit 31 invertido) e a decisão separada em "o que fazer se verdadeiro / se falso" | -0,234 | 97,7 | 1250 | 172 | 98 | 0 | igual no padrão e **pior** no máximo (−0,242); −16 LUTs. Revertido |
+| 2026-11-04 | P1 (protótipo) | placa | duas ROMs: lê PC+4 e o destino em paralelo e a decisão do desvio só escolhe a palavra | -0,390 | 96,2 | 1517 | 172 | 98 | 0 | o próximo PC sai do topo, mas a escrita do RF (AUIPC/JAL, load) piora com o design maior; máximo +0,032 (ruído). Não mantido |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
@@ -64,13 +68,55 @@ O RTL fecha 100 MHz só com o fluxo de esforço máximo, e com margem mínima (+
 - **Onde fica o registrador da instrução:** dentro da `instruction_memory`, o Vivado só evitava a BRAM com `rom_style = "distributed"`. Essa versão saiu com ~40 LUTs a mais e ~0,5 ns pior nos dois fluxos (`busca_sincrona`). Com o registrador no `search`, a ROM continua combinacional (não pode virar BRAM) e o resultado volta ao do protótipo. O valor inicial (palavra 0, para a placa partir sem reset) vem de um `$readmemh` no próprio `search`, e o INIT foi conferido no netlist.
 - **Bitstream na GUI:**
   - usar a estratégia `Performance_ExplorePostRoutePhysOpt` com `opt_design` em `ExploreWithRemap`; é o que o `-MaxEffort` reproduz;
-  - o fluxo de projeto da GUI pode dar resultado um pouco diferente do script. Com margem de 0,008 ns, o run da GUI pode ficar levemente negativo.
-- **Próximas alavancas, se precisar de margem:**
-  - repetir a implementação com outras diretivas de place (por exemplo, `ExtraTimingOpt`, `AltSpreadLogic_high`);
-  - encurtar o laço do próximo PC:
-    - comparação de igualdade só com LUTs, sem `CARRY4`;
-    - ou ler a ROM com PC+4 e com o destino em paralelo e escolher a palavra pela decisão do desvio. Isso tira o comparador da frente da ROM, mas duplica a ROM (~+700 LUTs);
-  - clock de ~97 MHz via MMCM, se o objetivo for só a placa (último caso, decisão de 04/11).
+  - o fluxo de projeto da GUI pode dar resultado um pouco diferente do script. Com margem de 0,008 ns, o run da GUI pode ficar levemente negativo;
+  - nesse caso, rodar de novo com a diretiva do `place_design` em `AltSpreadLogic_high`. Outra opção é um XDC usado só na implementação, com `set_clock_uncertainty -setup 0.2 [get_clocks sys_clk_pin]`; aí o WNS real tem de ser conferido no design implementado, depois de `set_clock_uncertainty -setup 0 [get_clocks sys_clk_pin]`.
+- **Próximas alavancas:** testadas logo abaixo, em "Busca de margem adicional".
+
+## Busca de margem adicional (04/11/2026, RTL de `ir_search`)
+
+Pior folga por família de caminho, com o Tcl de famílias adaptado ao registrador da instrução:
+
+| Família | Padrão (ns) | Esforço máximo (ns) |
+| :-- | --: | --: |
+| próximo PC (instrução → RF → comparador → ROM → instrução) | −0,228 | +0,008 |
+| load (instrução → endereço → RAM → RF) | +0,175 | +0,026 |
+| ALU → RF (com leitura do RF) | +0,303 | +0,039 |
+| deslocamento/decodificação → RF (sem somador; `alu_b` com fanout 105) | — | +0,110 |
+| store (→ escrita da RAM) | +0,656 | +0,448 |
+| MMIO | +1,980 | +1,666 |
+
+- **Famílias empatadas:** com esforço máximo, as quatro principais ficam a 0,1 ns umas das outras e têm 70–85% de rota. Melhorar uma só rende no máximo a distância até a próxima.
+- **Mudanças de RTL:** os experimentos E2, E3, E4 e P1 (tabela do histórico) mostram isso. Todo netlist novo muda o placement em ±0,2–0,5 ns, e nenhum ganhou nos dois fluxos.
+- **Placement:** o core já está compacto, com 358 slices numa caixa de 560 a 630 (~60% de ocupação). Um Pblock renderia pouco.
+
+Opções de ferramenta com o RTL de `ir_search`, todas no fluxo de esforço máximo (WNS com a restrição original de 10 ns):
+
+| Variação | WNS (ns) |
+| :-- | --: |
+| `-MaxEffort` (base) | +0,008 |
+| place `ExtraNetDelay_high` / `ExtraPostPlacementOpt` / `AltSpreadLogic_low` | +0,006 / +0,002 / +0,006 |
+| place `AltSpreadLogic_high` | +0,053 |
+| síntese `-flatten_hierarchy full` | +0,016 |
+| síntese `-no_lc` | −0,039 |
+| `phys_opt` e route `AggressiveExplore` | +0,004 |
+| sobrerrestrição 0,2 ns (`Explore` / `AltSpreadLogic_high`) | +0,154 / +0,057 |
+| sobrerrestrição 0,3 ns (`Explore` / `AltSpreadLogic_high` / `_medium` / `ExtraNetDelay_high`) | +0,053 / +0,205 / +0,072 / −0,015 |
+| sobrerrestrição 0,4 ns / 0,5 ns | −0,057 / −0,219 |
+| fluxo padrão com sobrerrestrição 0,3 ns | −0,504 |
+
+Sobrerrestrição: `set_clock_uncertainty -setup X` durante opt/place/phys_opt/route, removido antes do relatório final.
+
+- **Sem sobrerrestrição:** quase todas as variações terminam entre 0 e +0,05 ns, porque o `phys_opt` pós-route para quando o timing fecha.
+- **Com sobrerrestrição de 0,2–0,3 ns:** a média sobe para ~+0,09 ns, mas a dispersão é de ±0,15 ns. Serve como "outra tentativa" se o run da GUI ficar levemente negativo; não é ganho garantido.
+
+**Conclusão:** o RTL está no ponto de equilíbrio para 100 MHz. Ganho acima do ruído exigiria mexer no trecho comum a todas as famílias:
+- a saída do registrador da instrução até o endereço do RF;
+- a leitura do RF e a distribuição de `rs1`/`rs2`.
+
+As opções conhecidas são:
+- cópias do RF dedicadas ao comparador e ao somador de endereço (portas novas entre `decoder` e `execution`);
+- registrar os operandos com bypass (equivale a um estágio de pipeline, descartado);
+- clock de ~97–98 MHz via MMCM (último caso).
 
 ## Análise por família de caminho (04/11/2026, RTL de `alu_eq_direto`)
 
