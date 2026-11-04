@@ -32,7 +32,9 @@
  * @typedef alu_op_t Codigo de operacao da ALU.
  * Valores: OP_ADD (soma), OP_SUB (subtracao), OP_AND, OP_OR, OP_XOR,
  * OP_SLL, OP_SRL, OP_SRA, OP_SLT (menor que com sinal), OP_SLTU (menor que
- * sem sinal), OP_PASS_B (encaminha B) e OP_CMP (igualdade).
+ * sem sinal), OP_PASS_B (encaminha B) e OP_CMP (igualdade). Nos desvios, o
+ * código também escolhe a comparação do comparador da `execution` (OP_CMP,
+ * OP_SLT, OP_SLTU); OP_CMP só existe para isso, e a ALU devolve 0 para ele.
  */
 package alu_pkg;
 
@@ -48,7 +50,7 @@ package alu_pkg;
         OP_SLT    = 4'b1000, // Comparação Menor Que Com Sinal
         OP_SLTU   = 4'b1001, // Comparação Menor Que Sem Sinal
         OP_PASS_B = 4'b1010, // Passagem Direta do Operando B
-        OP_CMP    = 4'b1011  // Comparação de igualdade entre A e B
+        OP_CMP    = 4'b1011  // Igualdade (BEQ/BNE): escolhe a comparação do comparador de desvio da execution; a ALU devolve 0
     } alu_op_t;
 
 endpackage : alu_pkg

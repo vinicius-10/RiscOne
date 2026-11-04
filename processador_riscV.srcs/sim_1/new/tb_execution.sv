@@ -25,7 +25,9 @@
  * Exercita os seletores de operandos, operacoes da ALU e os quatro modos de
  * calculo/decisao de desvio. A task de verificacao compara o resultado da ALU,
  * o endereco de destino e o indicador de desvio tomado, acumulando falhas em
- * `fail_count`.
+ * `fail_count`. A decisão dos desvios condicionais vem do comparador dedicado
+ * (`rs1` × `rs2`), independente dos muxes e da operação da ALU; `OP_CMP` só
+ * escolhe a igualdade no comparador (a ALU devolve 0 para ele).
  *
  * @param clk Clock de referencia usado para organizar os estimulos.
  * @param pc_next_i Endereco sequencial aplicado ao DUT.
@@ -439,12 +441,12 @@ module tb_execution;
         imm_i            = 32'h1234_5678; // Valor imediato
         reg_data1_i      = 32'd100;       // rs1 = 100
         reg_data2_i      = 32'd100;       // rs2 = 100
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (A == B ? 1 : 0)
-        branch_control_i = OP_BCT;  // Branch: BEQ
-        branch_enable_i  = 1'b0;          // Branch: Desativado
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (a ALU devolve 0)
+        branch_control_i = OP_BCT;        // Branch: BEQ
+        branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(18, "ULA OP_CMP: Iguais (100 == 100)", 32'd1, 32'h1234_6678, 1'b0);
+        check_result(18, "Comparador BEQ: iguais (100 == 100), ALU = 0", 32'd0, 32'h1234_6678, 1'b1);
 
         @(negedge clk); // TESTE 19
         pc_i             = 32'h0000_1000; // Endereço atual do PC
@@ -452,12 +454,12 @@ module tb_execution;
         imm_i            = 32'h1234_5678; // Valor imediato
         reg_data1_i      = 32'd100;       // rs1 = 100
         reg_data2_i      = 32'd50;        // rs2 = 50
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (A == B ? 1 : 0)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (a ALU devolve 0)
         branch_control_i = OP_BCT;        // Branch: BEQ
-        branch_enable_i  = 1'b0;          // Branch: Desativado
+        branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(19, "ULA OP_CMP: Diferentes (100 == 50)", 32'd0, 32'h1234_6678, 1'b0);
+        check_result(19, "Comparador BEQ: diferentes (100 != 50)", 32'd0, 32'h1234_6678, 1'b0);
 
         // ---------------------------------------------------------------------
         // SEÇÃO 3: TESTES DE DESVIOS E SALTOS (BRANCH E JUMP)
@@ -482,12 +484,12 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd50;        // rs2 = 50
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (50 == 50 -> 1)
-        branch_control_i = OP_BCT;        // Branch: BEQ (Toma desvio se resultado da ULA == 1)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 == 50)
+        branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(21, "Branch 00: Condicional Verdadeiro (Tomado)", 32'd1, 32'h0000_0240, 1'b1);
+        check_result(21, "Branch 00: Condicional Verdadeiro (Tomado)", 32'd0, 32'h0000_0240, 1'b1);
 
         @(negedge clk); // TESTE 22
         pc_i             = 32'h0000_0200; // PC base para desvio (0x200)
@@ -495,8 +497,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd30;        // rs2 = 30
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (50 == 30 -> 0)
-        branch_control_i = OP_BCT;        // Branch: BEQ (Toma desvio apenas se ULA == 1)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 != 30)
+        branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
@@ -508,8 +510,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd30;        // rs2 = 30
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (Diferentes -> 0)
-        branch_control_i = OP_BCF;         // Branch: BNE (Toma desvio se resultado da ULA == 0)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 != 30)
+        branch_control_i = OP_BCF;        // Branch: BNE (toma se rs1 != rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
@@ -521,12 +523,12 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd50;        // rs2 = 50
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (Iguais -> 1)
-        branch_control_i = OP_BCF;        // Branch: BNE (Toma desvio apenas se ULA == 0)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 == 50)
+        branch_control_i = OP_BCF;        // Branch: BNE (toma se rs1 != rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(24, "Branch 01: BNE em valores iguais (Nao Tomado)", 32'd1, 32'h0000_0240, 1'b0);
+        check_result(24, "Branch 01: BNE em valores iguais (Nao Tomado)", 32'd0, 32'h0000_0240, 1'b0);
 
         @(negedge clk); // TESTE 25
         pc_i             = 32'h0000_0200; // PC base para desvio (0x200)
@@ -539,7 +541,7 @@ module tb_execution;
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(25, "Jump 10: Incondicional PC + Imm (JAL)", 32'd1, 32'h0000_0240, 1'b1);
+        check_result(25, "Jump 10: Incondicional PC + Imm (JAL)", 32'd0, 32'h0000_0240, 1'b1);
 
         @(negedge clk); // TESTE 26
         pc_i             = 32'h0000_0200; // PC base
@@ -577,12 +579,12 @@ module tb_execution;
         imm_i            = -32'd16;       // Offset de -16 bytes (32'hFFFF_FFF0)
         reg_data1_i      = 32'd10;        // rs1 = 10
         reg_data2_i      = 32'd10;        // rs2 = 10
-        alu_control_i    = OP_CMP;        // ULA: Comparação de igualdade (10 == 10 -> 1)
-        branch_control_i = OP_BCT;        // Branch: BEQ (Toma desvio se ULA == 1)
+        alu_control_i    = OP_CMP;        // Comparador: igualdade (10 == 10)
+        branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(28, "Branch BEQ: Salto negativo no PC (Loop)", 32'd1, 32'h0000_0FF0, 1'b1);
+        check_result(28, "Branch BEQ: Salto negativo no PC (Loop)", 32'd0, 32'h0000_0FF0, 1'b1);
 
         @(negedge clk); // TESTE 29: JALR com imediato negativo
         pc_i             = 32'h0000_1000; // Endereço atual do PC
@@ -761,6 +763,130 @@ module tb_execution;
                 $display("[PASS] Teste 49: %-50s | 5000 vetores", "REGIAO: aleatorio contra rs1 + sext(imm)");
             end else begin
                 $display("[FAIL] Teste 49: REGIAO: aleatorio contra rs1 + sext(imm) | %0d erros", erros);
+                fail_count++;
+            end
+        end
+
+        // ---------------------------------------------------------------------
+        // SEÇÃO 7: COMPARADOR DE DESVIO (rs1 × rs2, sem a ALU)
+        // A condição dos desvios compara rs1 com rs2 direto; os muxes A/B e a
+        // ALU não influem. alu_control escolhe a comparação: OP_SLT (com
+        // sinal), OP_SLTU (sem sinal) ou igualdade (OP_CMP).
+        // ---------------------------------------------------------------------
+
+        @(negedge clk); // TESTE 50: MUX B no imediato não afeta o BEQ
+        pc_i             = 32'h0000_0200; // Alvo: 0x200 + 0x40 = 0x240
+        pc_next_i        = 32'h0000_0204;
+        imm_i            = 32'h0000_0040; // B = imediato, diferente de rs2
+        reg_data1_i      = 32'd7;
+        reg_data2_i      = 32'd7;
+        alu_control_i    = OP_CMP;
+        branch_control_i = OP_BCT;        // BEQ
+        branch_enable_i  = 1'b1;
+        control_alu_a    = 1'b0;          // MUX A: rs1
+        control_alu_b    = 2'b01;         // MUX B: imediato
+        check_result(50, "Comparador: BEQ rs1 == rs2 com MUX B no imediato", 32'd0, 32'h0000_0240, 1'b1);
+
+        @(negedge clk); // TESTE 51: MUX A no PC não afeta o BEQ
+        reg_data1_i      = 32'd5;
+        reg_data2_i      = 32'h0000_0200; // igual ao PC, diferente de rs1
+        control_alu_a    = 1'b1;          // MUX A: PC
+        control_alu_b    = 2'b00;         // MUX B: rs2
+        check_result(51, "Comparador: BEQ rs1 != rs2 com MUX A no PC", 32'd0, 32'h0000_0240, 1'b0);
+
+        // Fronteira de sinal: 0x80000000 é o menor com sinal e maior sem sinal.
+        @(negedge clk); // TESTE 52
+        reg_data1_i      = 32'h8000_0000;
+        reg_data2_i      = 32'h7FFF_FFFF;
+        control_alu_a    = 1'b0;
+        control_alu_b    = 2'b00;
+        alu_control_i    = OP_SLT;
+        branch_control_i = OP_BCT;        // BLT
+        check_result(52, "Comparador: BLT 0x80000000 < 0x7FFFFFFF (tomado)", 32'd1, 32'h0000_0240, 1'b1);
+
+        @(negedge clk); // TESTE 53
+        branch_control_i = OP_BCF;        // BGE
+        check_result(53, "Comparador: BGE 0x80000000 >= 0x7FFFFFFF (nao)", 32'd1, 32'h0000_0240, 1'b0);
+
+        @(negedge clk); // TESTE 54
+        alu_control_i    = OP_SLTU;
+        branch_control_i = OP_BCT;        // BLTU
+        check_result(54, "Comparador: BLTU 0x80000000 < 0x7FFFFFFF (nao)", 32'd0, 32'h0000_0240, 1'b0);
+
+        @(negedge clk); // TESTE 55
+        branch_control_i = OP_BCF;        // BGEU
+        check_result(55, "Comparador: BGEU 0x80000000 >= 0x7FFFFFFF (tomado)", 32'd0, 32'h0000_0240, 1'b1);
+
+        @(negedge clk); // TESTE 56: -1 × 0
+        reg_data1_i      = 32'hFFFF_FFFF;
+        reg_data2_i      = 32'h0000_0000;
+        alu_control_i    = OP_SLT;
+        branch_control_i = OP_BCT;        // BLT
+        check_result(56, "Comparador: BLT -1 < 0 (tomado)", 32'd1, 32'h0000_0240, 1'b1);
+
+        @(negedge clk); // TESTE 57
+        alu_control_i    = OP_SLTU;       // BLTU: 0xFFFFFFFF < 0 é falso
+        check_result(57, "Comparador: BLTU 0xFFFFFFFF < 0 (nao)", 32'd0, 32'h0000_0240, 1'b0);
+
+        @(negedge clk); // TESTE 58: iguais no BGE (não é menor -> tomado)
+        reg_data1_i      = 32'h8000_0000;
+        reg_data2_i      = 32'h8000_0000;
+        alu_control_i    = OP_SLT;
+        branch_control_i = OP_BCF;        // BGE
+        check_result(58, "Comparador: BGE iguais (tomado)", 32'd0, 32'h0000_0240, 1'b1);
+
+        // TESTE 59: vetores aleatórios contra um modelo do comparador. rs2 = rs1
+        // em 1/4 dos vetores e só o bit de sinal diferente em outro 1/4; muxes,
+        // imediato e PC aleatórios (não podem influir na decisão).
+        begin
+            alu_op_t         ops [3];
+            logic [XLEN-1:0] rs1, rs2;
+            logic            cond, ref_taken;
+            int              erros;
+
+            ops   = '{OP_CMP, OP_SLT, OP_SLTU};
+            erros = 0;
+            for (int n = 0; n < 2000; n++) begin
+                rs1 = $urandom;
+                case (n % 4)
+                    0:       rs2 = rs1;
+                    1:       rs2 = rs1 ^ 32'h8000_0000;
+                    default: rs2 = $urandom;
+                endcase
+
+                @(negedge clk);
+                reg_data1_i      = rs1;
+                reg_data2_i      = rs2;
+                alu_control_i    = ops[$urandom_range(2)];
+                branch_control_i = ($urandom_range(1) == 1) ? OP_BCF : OP_BCT;
+                branch_enable_i  = 1'b1;
+                control_alu_a    = $urandom_range(1);
+                control_alu_b    = $urandom_range(2);
+                imm_i            = $urandom;
+                pc_i             = $urandom;
+                pc_next_i        = $urandom;
+
+                case (alu_control_i)
+                    OP_SLT:  cond = ($signed(rs1) < $signed(rs2));
+                    OP_SLTU: cond = (rs1 < rs2);
+                    default: cond = (rs1 == rs2);
+                endcase
+                ref_taken = (branch_control_i == OP_BCT) ? cond : ~cond;
+
+                #1;
+                if (branch_taken_o !== ref_taken) begin
+                    if (erros < 5)
+                        $display("       rs1=0x%08h rs2=0x%08h %s %s A=%0b B=%0d -> taken %0b (esperado %0b)",
+                                 rs1, rs2, alu_control_i.name(), branch_control_i.name(),
+                                 control_alu_a, control_alu_b, branch_taken_o, ref_taken);
+                    erros++;
+                end
+            end
+
+            if (erros == 0) begin
+                $display("[PASS] Teste 59: %-50s | 2000 vetores", "Comparador: aleatorio contra o modelo");
+            end else begin
+                $display("[FAIL] Teste 59: Comparador: aleatorio contra o modelo | %0d erros", erros);
                 fail_count++;
             end
         end

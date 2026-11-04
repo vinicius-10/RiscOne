@@ -28,10 +28,12 @@
  *
  * Seleciona os operandos da ALU, executa a operacao indicada e calcula em
  * paralelo o endereco de destino de desvio. Para desvios condicionais, a
- * decisao usa `alu_lsb`, que nesta implementacao reflete o bit menos significativo
- * do resultado da ALU: OP_BCT aceita quando `alu_lsb` vale 1 e OP_BCF aceita
- * quando `alu_lsb` vale 0. OP_BIP e OP_BIR sao desvios incondicionais relativos ao
- * PC e a rs1, respectivamente.
+ * decisão vem de um comparador dedicado entre `reg_data1_i` (rs1) e
+ * `reg_data2_i` (rs2), que não passa pelos muxes de operando nem pela ALU.
+ * `alu_control_i` escolhe a comparação: OP_SLT = menor com sinal, OP_SLTU =
+ * menor sem sinal, qualquer outro (OP_CMP) = igualdade. OP_BCT desvia quando a
+ * comparação é verdadeira e OP_BCF quando é falsa. OP_BIP e OP_BIR sao desvios
+ * incondicionais relativos ao PC e a rs1, respectivamente.
  *
  * @param XLEN Largura dos dados e enderecos. Valor padrao: 32 bits.
  * @param pc_next_i Endereco sequencial da instrucao, normalmente PC + 4.
@@ -89,9 +91,9 @@ module execution
     logic [XLEN-1:0] alu_a;
     logic [XLEN-1:0] alu_b;
     logic [XLEN-1:0] alu_result;
-    logic            alu_lsb;
 
     logic [XLEN-1:0] branch_address;
+    logic            branch_cond;
     logic            branch_taken;
     logic [XLEN-1:0] branch_a;
     logic [XLEN-1:0] branch_b;
@@ -121,20 +123,30 @@ module execution
         .a_i     (alu_a),
         .b_i     (alu_b),
         .alu_op_i(alu_control_i),
-        .alu_o   (alu_result),
-        .alu_lsb_o(alu_lsb)
+        .alu_o   (alu_result)
     );
+
+    // Comparador dedicado dos desvios: rs1 x rs2 direto, sem os muxes de
+    // operando nem a decodificação da operação da ALU no caminho; o
+    // alu_control_i só escolhe o resultado no fim.
+    always_comb begin
+        case (alu_control_i)
+            OP_SLT:  branch_cond = ($signed(reg_data1_i) < $signed(reg_data2_i));
+            OP_SLTU: branch_cond = (reg_data1_i < reg_data2_i);
+            default: branch_cond = (reg_data1_i == reg_data2_i);   // OP_CMP
+        endcase
+    end
 
     // Escolhe a condicao do desvio e a base do endereco de destino.
     always_comb begin
         if (branch_enable_i) begin
             case (branch_control_i)
                 OP_BCT: begin
-                    branch_taken = alu_lsb;
+                    branch_taken = branch_cond;
                     branch_b     = pc_i;
                 end
                 OP_BCF: begin
-                    branch_taken = ~alu_lsb;
+                    branch_taken = ~branch_cond;
                     branch_b     = pc_i;
                 end
                 OP_BIP: begin

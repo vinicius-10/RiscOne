@@ -86,8 +86,8 @@ top_core (interface dos pinos da Nexys A7)
 | `control_unit` | Decodifica opcode/funct3/funct7 e gera controles do datapath. |
 | `register_file` | Implementa `x1`–`x31`, leituras combinacionais, escrita síncrona e `x0` constante. |
 | `imm_gen` | Reconstrói e estende imediatos I, S, B, U e J. |
-| `execution` | Seleciona operandos, aciona ALU e calcula decisão/endereço de branch ou salto. |
-| `alu` | Aritmética, lógica, comparação, deslocamento e passagem de B. |
+| `execution` | Seleciona operandos, aciona ALU, calcula o endereço de branch ou salto e decide os branches com um comparador dedicado (`rs1` × `rs2`). |
+| `alu` | Aritmética, lógica, comparação (SLT/SLTU), deslocamento e passagem de B. |
 | `data_memory` | RAM byte-addressable, loads/stores e periféricos mapeados em memória. |
 | `write_back` | Seleciona resultado da ALU ou dado lido da memória. |
 
@@ -104,7 +104,7 @@ ciclo:  [instr] --> control_unit --> sinais de controle
           |  \----> imm_gen -------> imm
           \-------> register_file --> rs1, rs2
         execution: mux A/B + ALU ---------------> alu_result
-                   alu_lsb + branch_control ----> branch_taken, pc_branch
+                   comparador rs1 × rs2 --------> branch_taken, pc_branch
                    rs1 + imm (somador próprio) -> endereço --> data_memory (RAM / MMIO) --> dado lido
         write_back: alu_result | dado lido -----> register_file[rd] (na borda)
         próximo PC = reset ? 0 : (branch_taken ? pc_branch : PC+4) --> instruction_memory (lê a ROM)
@@ -118,13 +118,13 @@ ciclo:  [instr] --> control_unit --> sinais de controle
 | I aritm. (`addi`…`srai`) | rs1 | imm I | conforme funct3/imm[11:5] | — | resultado da ALU | PC+4 |
 | Load (`lb`…`lhu`) | rs1 | imm I | ADD (endereço) | lê, largura/sinal por funct3 | dado da memória | PC+4 |
 | Store (`sb`/`sh`/`sw`) | rs1 | imm S | ADD (endereço) | escreve rs2 (byte enables) | — | PC+4 |
-| Branch (`beq`…`bgeu`) | rs1 | rs2 | CMP / SLT / SLTU | — | — | PC+imm B se condição, senão PC+4 |
+| Branch (`beq`…`bgeu`) | rs1 | rs2 | CMP / SLT / SLTU (escolhe a comparação) | — | — | PC+imm B se condição, senão PC+4 |
 | `lui` | — | imm U | PASS_B | — | imm U | PC+4 |
 | `auipc` | PC | imm U | ADD | — | PC + imm U | PC+4 |
 | `jal` | — | PC+4 | PASS_B | — | PC+4 | PC + imm J |
 | `jalr` | — | PC+4 | PASS_B | — | PC+4 | (rs1 + imm I) & ~1 |
 
-Nos branches, a condição é `alu_o[0]`: `OP_BCT` desvia quando é 1 e `OP_BCF` quando é 0. Assim `beq`=CMP/BCT, `bne`=CMP/BCF, `blt`=SLT/BCT, `bge`=SLT/BCF, `bltu`=SLTU/BCT, `bgeu`=SLTU/BCF.
+Nos branches, a condição vem do comparador dedicado da `execution`, que compara `rs1` com `rs2` direto (a ALU não participa). A operação (CMP / SLT / SLTU) só escolhe a comparação: igualdade, menor com sinal ou menor sem sinal. `OP_BCT` desvia com a comparação verdadeira e `OP_BCF` com ela falsa. Assim `beq`=CMP/BCT, `bne`=CMP/BCF, `blt`=SLT/BCT, `bge`=SLT/BCF, `bltu`=SLTU/BCT, `bgeu`=SLTU/BCF.
 
 ### 3.3 Tabela de controle (`control_unit`)
 
@@ -143,6 +143,7 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 7. **Falha de decode sem trap:** instrução não suportada recebe controles padrão e fluxo segue.
 8. **Alinhamento de instrução:** instruções são palavras de 32 bits, indexadas com os bits `[1:0]` descartados.
 9. **Memória de instruções síncrona (04/11/2026):** a ROM é lida com o próximo PC e a instrução fica num registrador atualizado na mesma borda que o PC. Continua monociclo; a leitura da ROM sai do início de todos os caminhos de timing.
+10. **Comparador de desvio dedicado (04/11/2026):** os branches comparam `rs1` com `rs2` direto na `execution`, sem os muxes de operando nem a ALU. O próximo PC deixa de esperar a decodificação da operação da ALU.
 
 ## 5. Organização dos arquivos
 
@@ -207,7 +208,7 @@ Por enquanto **não serão implementados** traps nem tratamento de desalinhament
 
 ### 8.2 Resolvidas
 
-1. **Flag `alu_lsb_o` (antes `zero_o`):** renomeada porque é `alu_o[0]`, não uma flag de resultado zero. CMP/SLT/SLTU retornam 0/1 e os branches usam esse bit como condição (BCT/BCF). Convenção mantida.
+1. **Flag `alu_lsb_o` (antes `zero_o`):** era `alu_o[0]`, não uma flag de resultado zero, e servia de condição dos branches. Em 04/11/2026 a condição passou para um comparador dedicado na `execution` (`rs1` × `rs2`, escolhido pelo `alu_op_t` do branch). A porta saiu da ALU, junto com o cálculo do `OP_CMP`.
 2. **`SLTU`:** `~carry` de `a + ~b + 1` está correto; coberto por `tb_alu` e `tb_core`.
 3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4` (até `0x0FFF` com o padrão); o comentário do `data_memory` foi corrigido.
 4. **Loads/stores MMIO parciais:** byte/halfword em MMIO usam as mesmas lanes e extensão de sinal da RAM (seção 2.3).

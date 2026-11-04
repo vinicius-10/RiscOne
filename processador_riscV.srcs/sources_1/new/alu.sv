@@ -31,16 +31,19 @@
  * Operações suportadas:
  * - aritmética: soma, subtração;
  * - lógica: AND, OR, XOR;
- * - comparação: SLT, SLTU, CMP;
+ * - comparação: SLT, SLTU;
  * - deslocamento: SLL, SRL, SRA;
  * - passagem: PASS_B.
+ *
+ * A ALU não decide desvios: a condição dos branches vem do comparador dedicado
+ * da `execution`. Por isso `OP_CMP` (igualdade, usado só por BEQ/BNE) não é
+ * calculado aqui e cai no valor padrão 0.
  *
  * @param XLEN Largura dos operandos e do resultado da ALU. Valor padrão: 32 bits.
  * @param a_i Operando A de entrada.
  * @param b_i Operando B de entrada.
  * @param alu_op_i Código da operação a ser executada.
- * @retval alu_o Resultado da operação selecionada.
- * @retval alu_lsb_o Bit 0 (LSB) do resultado `alu_o`. Em CMP/SLT/SLTU o resultado e 0 ou 1, entao este bit e a condicao usada pelos branches.
+ * @retval alu_o Resultado da operação selecionada (0 para OP_CMP).
  */
 module alu import alu_pkg::*; #(
     parameter int XLEN = 32
@@ -48,8 +51,7 @@ module alu import alu_pkg::*; #(
     input  logic [XLEN-1:0] a_i,
     input  logic [XLEN-1:0] b_i,
     input  alu_op_t         alu_op_i,
-    output logic [XLEN-1:0] alu_o,
-    output logic            alu_lsb_o
+    output logic [XLEN-1:0] alu_o
 );
 
 
@@ -68,18 +70,14 @@ module alu import alu_pkg::*; #(
     assign b_mux  = is_sub ? ~b_i : b_i;
     assign add_sub_res = a_i + b_mux + is_sub;
 
-    logic cmp_slt, cmp_sltu, cmp_eq;
-    
-    assign cmp_sltu = ~add_sub_res[XLEN]; 
+    logic cmp_slt, cmp_sltu;
+
+    assign cmp_sltu = ~add_sub_res[XLEN];
     assign cmp_slt  = (a_i[XLEN-1] != b_i[XLEN-1]) ? a_i[XLEN-1] : add_sub_res[XLEN-1];
-    
-    // Igualdade direta (XOR + redução): não espera a cadeia de carry do somador.
-    assign cmp_eq   = (a_i == b_i);
 
     logic [XLEN-1:0] res_arith;
     assign res_arith = (alu_op_i == OP_SLT)  ? {{(XLEN-1){1'b0}}, cmp_slt}  :
                        (alu_op_i == OP_SLTU) ? {{(XLEN-1){1'b0}}, cmp_sltu} :
-                       (alu_op_i == OP_CMP)  ? {{(XLEN-1){1'b0}}, cmp_eq}   :
                        add_sub_res[XLEN-1:0];
 
     // --------------------------------------------------------
@@ -113,18 +111,12 @@ module alu import alu_pkg::*; #(
     // --------------------------------------------------------
     always_comb begin
         case (alu_op_i)
-            // OP_CMP adicionado ao mux aritmético
-            OP_ADD, OP_SUB, OP_SLT, OP_SLTU, OP_CMP: alu_o = res_arith;
-            OP_AND, OP_OR, OP_XOR, OP_PASS_B:        alu_o = res_logic;
-            OP_SLL, OP_SRL, OP_SRA:                  alu_o = res_shift;
-            default:                                 alu_o = '0;
+            OP_ADD, OP_SUB, OP_SLT, OP_SLTU:   alu_o = res_arith;
+            OP_AND, OP_OR, OP_XOR, OP_PASS_B:  alu_o = res_logic;
+            OP_SLL, OP_SRL, OP_SRA:            alu_o = res_shift;
+            default:                           alu_o = '0;   // inclui OP_CMP
         endcase
     end
-
-    // --------------------------------------------------------
-    // Flag alu_lsb_o: reflete o LSB (Bit 0) da saída
-    // --------------------------------------------------------
-    assign alu_lsb_o = alu_o[0];
 
 endmodule
 

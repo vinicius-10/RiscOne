@@ -92,10 +92,15 @@ Padrões (opcode desconhecido / NOP): ALU `OP_ADD`, A = rs1, B = rs2, sem desvio
 
 | Código | Nome | Desvia quando | Alvo |
 | :-- | :-- | :-- | :-- |
-| `00` | `OP_BCT` | `alu_lsb_o == 1` | `(PC + imm) & ~1` |
-| `01` | `OP_BCF` | `alu_lsb_o == 0` | `(PC + imm) & ~1` |
+| `00` | `OP_BCT` | comparação verdadeira | `(PC + imm) & ~1` |
+| `01` | `OP_BCF` | comparação falsa | `(PC + imm) & ~1` |
 | `10` | `OP_BIP` | sempre (JAL) | `(PC + imm) & ~1` |
 | `11` | `OP_BIR` | sempre (JALR) | `(rs1 + imm) & ~1` |
+
+A comparação vem de um comparador dedicado da `execution`, que compara `rs1` com `rs2` direto,
+sem os muxes de operando nem a ALU. O `alu_op_t` do desvio só escolhe qual comparação usar:
+`OP_SLT` → `$signed(rs1) < $signed(rs2)` (BLT/BGE), `OP_SLTU` → `rs1 < rs2` (BLTU/BGEU) e
+qualquer outro, na prática `OP_CMP` → `rs1 == rs2` (BEQ/BNE).
 
 ### 5.3 Matriz por grupo
 
@@ -131,11 +136,10 @@ calculado num somador separado dentro do `execution`.
 | `1000` | `OP_SLT` | 1 se A < B (com sinal), senão 0 |
 | `1001` | `OP_SLTU` | 1 se A < B (sem sinal) = `~carry` de A + ~B + 1 |
 | `1010` | `OP_PASS_B` | B |
-| `1011` | `OP_CMP` | 1 se A == B, senão 0 |
+| `1011` | `OP_CMP` | 0: não é calculado pela ALU; só escolhe a igualdade no comparador de desvio (§5.2) |
 
-Saídas: `alu_o` (resultado de 32 bits) e **`alu_lsb_o = alu_o[0]`** (bit 0 do resultado).
-Não é uma flag de "resultado zero". Como CMP/SLT/SLTU devolvem 0 ou 1, esse bit é a
-condição do branch. Ao mudar a ALU, mantenha CMP/SLT/SLTU retornando exatamente 0/1.
+Saída: `alu_o` (resultado de 32 bits). A ALU não decide desvios: a condição vem do comparador
+dedicado da `execution` (§5.2). SLT e SLTU continuam na ALU para SLT, SLTI, SLTU e SLTIU.
 
 ## 7. Hierarquia e interfaces dos módulos
 
@@ -165,8 +169,8 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
 | `imm_gen` | `instruction_i` | `imm_o` | §4 |
 | `control_unit` | `instruction_i` | §5.1 | §5 |
-| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o`, `mem_io_o`, `mem_page0_o` | §5.2; `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B); `mem_io_o` = `mem_addr_o[31:28] == 4`, `mem_page0_o` = `mem_addr_o[31:12] == 0`, calculadas sem esperar o somador e exatas só com imediato de 12 bits (load/store; §9) |
-| `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o`, `alu_lsb_o` | §6 |
+| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o`, `mem_io_o`, `mem_page0_o` | §5.2 (condição pelo comparador dedicado `rs1` × `rs2`); `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B); `mem_io_o` = `mem_addr_o[31:28] == 4`, `mem_page0_o` = `mem_addr_o[31:12] == 0`, calculadas sem esperar o somador e exatas só com imediato de 12 bits (load/store; §9) |
+| `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o` | §6 |
 | `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `addr_io_i`, `addr_page0_i`, `data_i`, `io_in0_i` … `io_in3_i` (32 bits) | `data_o`, `io_out0_o` … `io_out3_o` (32 bits) | §9 |
 | `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
 
