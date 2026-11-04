@@ -28,7 +28,7 @@
  * Decodifica o opcode e monta o imediato nos formatos I, S, B, U ou J,
  * incluindo extensão de sinal e os bits de alinhamento definidos pela ISA.
  *
- * @param instuction_i Instrução de 32 bits.
+ * @param instruction_i Instrução de 32 bits.
  * @retval imm_o Imediato de 32 bits decodificado e estendido.
  */
 module imm_gen(
