@@ -19,13 +19,20 @@ Se o RTL mudar, atualize este arquivo junto.
 ## 2. Clock e reset
 
 - Um único clock `clk`, borda de subida.
-- Elementos sequenciais: PC (`search`), escrita no `register_file`, escrita na RAM e
-  registradores de saída MMIO (`data_memory`). Todo o resto é combinacional.
+- Elementos sequenciais: PC (`search`), instrução registrada (`instruction_memory`, leitura
+  síncrona), escrita no `register_file`, escrita na RAM e registradores de saída MMIO
+  (`data_memory`). Todo o resto é combinacional.
+- Busca: o próximo PC (`search.pc_sel`) vai, na mesma borda, para o PC e para o endereço da
+  `instruction_memory`, que registra a palavra desse endereço. Depois de cada borda a instrução
+  é a do PC atual; continua uma instrução por ciclo, sem estágios. A leitura da ROM acontece
+  no fim do ciclo anterior, assim que o próximo PC fica pronto.
 - Pino da placa `CPU_RESETN` (ativo em nível **baixo**) entra em `top_core`, que **inverte**
   (`reset = ~CPU_RESETN`) e entrega ao `core` (porta `reset_i`) um reset **síncrono ativo em
   nível alto**; o `core` repassa `reset_i` sem alteração ao `search` (porta `reset_i`).
-- O reset **zera somente o PC**. Registradores, RAM e saídas MMIO não são resetados; eles
-  partem dos valores de `initial` (zeros / arquivos `.mem`), que valem só na carga do FPGA.
+- O reset força o próximo PC a 0: na borda, o PC zera e a `instruction_memory` registra a
+  palavra 0. Registradores, RAM e saídas MMIO não são resetados; eles partem dos valores de
+  `initial` (zeros / arquivos `.mem`), que valem só na carga do FPGA. Na carga, o PC nasce 0 e
+  a instrução registrada nasce com a palavra 0, então a placa parte sem apertar o reset.
 
 ## 3. Codificação (opcode / funct3 / funct7)
 
@@ -152,8 +159,8 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | Módulo | Entradas | Saídas | Comportamento |
 | :-- | :-- | :-- | :-- |
 | `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `reset = ~CPU_RESETN` → `core.reset_i`; `io_in0 = {16'b0, switch}`, `io_in1 = {27'b0, BTND,BTNR,BTNL,BTNU,BTNC}`, `io_in2 = {28'b0, JA[10:7]}`, `io_in3 = 0`; `led = io_out0[15:0]`, `c_7_segment = io_out1[7:0]` (cátodos), `a_7_segment = io_out1[15:8]` (ânodos), `JA[4:1] = io_out2[3:0]`; `io_out3` sem ligação |
-| `search` | `clk`, `reset_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; na borda: `reset_i` → PC=0, senão se `pc_write_i`: PC = `pc_branch_i ? new_pc_i : pc_next` |
-| `instruction_memory` | `addr_i` | `instr_o` | ROM de palavras, leitura combinacional por `addr_i[..:2]`, carregada de `MEM_FILE` |
+| `search` | `clk`, `reset_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; próximo PC `pc_sel = reset_i ? 0 : pc_write_i ? (pc_branch_i ? new_pc_i : pc_next) : PC`; na borda, PC = `pc_sel`. `pc_sel` também endereça a `instruction_memory`, então `instr_o` (registrada) é a instrução do PC atual |
+| `instruction_memory` | `clk`, `addr_i` (próximo PC) | `instr_o` | ROM de palavras em LUTs (`rom_style = "distributed"`), carregada de `MEM_FILE`; leitura síncrona: na borda, `instr_o = mem[addr_i[..:2]]`; nasce com `mem[0]` |
 | `decoder` | `clk`, `instruction_i`, `written_data_i` | `rs1_o`, `rs2_o`, `imm_o` + todas as saídas do `control_unit` | rd=`[11:7]`, rs1=`[19:15]`, rs2=`[24:20]` |
 | `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
 | `imm_gen` | `instruction_i` | `imm_o` | §4 |
@@ -193,10 +200,11 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 Fluxo de um ciclo:
 
 ```text
-PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► execution ─┬─ rs1+imm ───► data_memory ─┐
- ▲                                    └─ controle ────►            │                              ▼
- │                                                                 └─ ALU ─► alu_result ─────► write_back ─► register_file (borda)
- └─ search: PC = branch_taken ? pc_branch : PC+4 (borda) ◄── execution
+[instr] ─► decoder ─┬─ rs1/rs2/imm ─► execution ─┬─ rs1+imm ───► data_memory ─┐
+   ▲                └─ controle ────►            │                              ▼
+   │                                             └─ ALU ─► alu_result ─────► write_back ─► register_file (borda)
+   └─ search: pc_sel = branch_taken ? pc_branch : PC+4 ◄── execution
+              na borda: PC ← pc_sel e [instr] ← instruction_memory[pc_sel]
 ```
 
 ## 9. Memória de dados e MMIO (`data_memory`)

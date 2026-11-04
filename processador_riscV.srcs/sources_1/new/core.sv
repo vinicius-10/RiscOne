@@ -18,8 +18,9 @@
 // Revision:
 // Revision 0.02 - Integracao dos modulos do processador
 // Additional Comments:
-//   O sinal reset_i e encaminhado ao modulo search, que zera o PC de forma
-//   sincrona. As memorias sao inicializadas pelos arquivos configurados nos
+//   O sinal reset_i é encaminhado ao módulo search, que zera o PC de forma
+//   síncrona e faz a memória de instruções registrar a palavra 0. As memorias
+//   sao inicializadas pelos arquivos configurados nos
 //   parametros INSTR_MEM_FILE e DATA_MEM_FILE.
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -39,8 +40,8 @@
  * saidas genericas de E/S (MMIO) de 32 bits; o significado de cada uma na
  * placa e definido no top_core. Os sinais de PC, instrucao e resultados
  * permanecem internos ao modulo. O banco de
- * registradores nao possui reset; `reset_i` reinicia somente o PC por meio do
- * modulo `search`.
+ * registradores não possui reset; `reset_i` reinicia somente o PC (e a
+ * instrução registrada, que volta à palavra 0) por meio do módulo `search`.
  *
  * @param XLEN Largura dos dados e enderecos. Padrao: 32 bits.
  * @param MEM_DEPTH Numero de palavras na memoria de instrucoes e na memoria de
@@ -49,8 +50,9 @@
  *                       instrucoes. Padrao: `program_bytes.mem`.
  * @param DATA_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
  *                      dados. Padrao: `data.mem`.
- * @param clk Clock do processador; PC, escritas no banco de registradores e
- *            escritas na memoria de dados sao atualizados na borda de subida.
+ * @param clk Clock do processador; PC, instrução registrada, escritas no banco
+ *            de registradores e escritas na memória de dados são atualizados
+ *            na borda de subida.
  * @param reset_i Reset sincrono ativo em nivel alto para zerar o PC.
  * @param io_in0_i..io_in3_i Entradas genericas, lidas em 0x4000_0010 + 4k.
  * @retval io_out0_o..io_out3_o Saidas genericas, somente escrita, em

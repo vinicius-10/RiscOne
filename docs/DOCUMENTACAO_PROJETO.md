@@ -33,11 +33,11 @@ Opcode não reconhecido não gera escrita em registrador ou memória nem exceç�
 - Banco arquitetural de 32 registradores, com `x0` sempre lido como zero e escrita em `x0` descartada.
 - Duas portas de leitura combinacional e uma porta de escrita síncrona.
 - O banco não tem reset; `x1`–`x31` começam em zero por um bloco `initial` (valor de inicialização na FPGA e ausência de `X` na simulação), mas o reset não os limpa.
-- O reset ativo baixo da placa é invertido para gerar reset síncrono ativo alto do PC. O reset zera somente o PC.
+- O reset ativo baixo da placa é invertido para gerar reset síncrono ativo alto do PC. O reset força o próximo PC a 0: o PC zera e a memória de instruções registra a palavra 0. Nada mais é limpo.
 
 ### 2.3 Memórias
 
-- Memória de instruções de leitura combinacional, inicializada com `$readmemh`.
+- Memória de instruções com leitura síncrona (ROM em LUTs): é endereçada pelo próximo PC e registra a instrução na mesma borda que o PC. É inicializada com `$readmemh` e nasce com a palavra 0, então a placa parte sem reset.
 - Memória de dados organizada como bytes, com leitura combinacional e escrita na borda de subida.
 - Acesso à RAM e ao MMIO suporta byte, halfword e word; loads suportam extensão com ou sem sinal. Em MMIO, `SB`/`SH` alteram apenas os bytes endereçados do registrador de saída e `LB`/`LBU`/`LH`/`LHU` extraem o byte/halfword endereçado (ex.: `LBU` em `0x4000_0011` retorna `io_in0[15:8]`, as chaves `[15:8]` na placa).
 - Acessos halfword/word desalinhados não são suportados (sem trap): o halfword usa `addr[1]` e a word ignora `addr[1:0]`.
@@ -80,8 +80,8 @@ top_core (interface dos pinos da Nexys A7)
 |---|---|
 | `top_core` | Inverte `CPU_RESETN` e liga os pinos da placa às entradas e saídas genéricas de 32 bits do core (LEDs, display, PMOD, switches, botões). |
 | `core` | Integra PC/busca, decode, execução, memória e write-back; encaminha parâmetros de memória. |
-| `search` | Mantém PC, produz `PC+4`, escolhe PC sequencial ou destino e consulta instrução. |
-| `instruction_memory` | Armazena palavras de instrução e faz leitura combinacional do índice derivado do endereço. |
+| `search` | Mantém PC, produz `PC+4`, escolhe o próximo PC (reset, sequencial ou destino) e o entrega ao PC e à memória de instruções na mesma borda. |
+| `instruction_memory` | Armazena as palavras de instrução e, na borda, registra a palavra do próximo PC (leitura síncrona); a saída é a instrução do PC atual. |
 | `decoder` | Extrai `rd`, `rs1`, `rs2`; integra banco, imediato e unidade de controle. |
 | `control_unit` | Decodifica opcode/funct3/funct7 e gera controles do datapath. |
 | `register_file` | Implementa `x1`–`x31`, leituras combinacionais, escrita síncrona e `x0` constante. |
@@ -93,22 +93,21 @@ top_core (interface dos pinos da Nexys A7)
 
 ### 3.1 Caminho de dados e temporização
 
-Busca de instrução, leituras do banco, geração de imediato, lógica de controle, ALU, leitura de RAM/MMIO e seleção de write-back são combinacionais. PC, banco de registradores, RAM e registradores de saída MMIO atualizam na borda positiva do clock. Assim, o datapath executa uma instrução por ciclo conforme o estado combinacional entre bordas.
+Leituras do banco, geração de imediato, lógica de controle, ALU, leitura de RAM/MMIO e seleção de write-back são combinacionais. PC, instrução registrada (dentro da `instruction_memory`), banco de registradores, RAM e registradores de saída MMIO atualizam na borda positiva do clock. A memória de instruções é lida com o próximo PC, no fim do ciclo anterior, e registra a instrução na mesma borda que o PC. Assim, cada ciclo começa com a instrução pronta, e o datapath continua executando uma instrução por ciclo, sem estágios. Essa organização foi adotada em 04/11/2026 para tirar a leitura da ROM do início de todos os caminhos (ver `docs/TIMING.md`).
 
-Correspondência com a divisão clássica de módulos (Patterson & Hennessy): a "pc_unit" é o registrador de PC e o mux PC+4/destino dentro de `search`; o cálculo do destino (`PC+imm` ou `(rs1+imm) & ~1`) e a decisão de desvio ficam em `execution`.
+Correspondência com a divisão clássica de módulos (Patterson & Hennessy): a "pc_unit" é o registrador de PC e o mux do próximo PC (PC+4/destino) dentro de `search`; o cálculo do destino (`PC+imm` ou `(rs1+imm) & ~1`) e a decisão de desvio ficam em `execution`. O registrador da instrução lembra o IR do processador multiciclo, mas aqui é atualizado em todo ciclo, junto com o PC.
 
 ```text
-          +-------------------------------- branch_taken / pc_branch ------------------+
-          v                                                                            |
- [PC] --> instruction_memory --> instr --> control_unit --> sinais de controle         |
-   |                              |  \--> imm_gen ---------> imm ----+                 |
-   |                              \----> register_file --> rs1, rs2 |                 |
-   |                                                       |    |   |                 |
-   +--> PC, PC+4 ------------------------------------> [mux A][mux B] --> ALU --> alu_result
-                                                                                |   (endereço)
-                                                    rs2 --> data_memory <-------+
-                                                            |  (RAM / MMIO)
-                                     write_back: alu_result | mem_data --> register_file[rd]
+borda:  [PC] <= próximo PC        [instr] <= instruction_memory[próximo PC]
+
+ciclo:  [instr] --> control_unit --> sinais de controle
+          |  \----> imm_gen -------> imm
+          \-------> register_file --> rs1, rs2
+        execution: mux A/B + ALU ---------------> alu_result
+                   alu_lsb + branch_control ----> branch_taken, pc_branch
+                   rs1 + imm (somador próprio) -> endereço --> data_memory (RAM / MMIO) --> dado lido
+        write_back: alu_result | dado lido -----> register_file[rd] (na borda)
+        próximo PC = reset ? 0 : (branch_taken ? pc_branch : PC+4) --> instruction_memory (lê a ROM)
 ```
 
 ### 3.2 Fluxo de dados por tipo de instrução
@@ -138,11 +137,12 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 1. **Implementação monociclo:** etapas funcionais estão ligadas em um ciclo, com estado atualizado na borda de subida.
 2. **Separação em módulos e packages:** enums de opcode, ALU, branch e memória são centralizados em packages SystemVerilog.
 3. **`x0` constante sem célula física:** o array armazena apenas `x1`–`x31`.
-4. **Reset limitado ao PC:** banco, RAM e saídas MMIO não são limpos pelo reset; banco e periféricos têm inicialização `initial` em zero.
+4. **Reset limitado ao PC:** o reset leva o próximo PC a 0, e com ele o PC e a instrução registrada voltam ao endereço 0. Banco, RAM e saídas MMIO não são limpos pelo reset; banco e periféricos têm inicialização `initial` em zero.
 5. **Memórias inicializadas por arquivo hexadecimal:** `$readmemh` e parâmetros de caminho permitem trocar as imagens.
 6. **MMIO dentro da memória de dados:** periféricos compartilham o caminho de load/store através de decodificação de endereço.
 7. **Falha de decode sem trap:** instrução não suportada recebe controles padrão e fluxo segue.
 8. **Alinhamento de instrução:** instruções são palavras de 32 bits, indexadas com os bits `[1:0]` descartados.
+9. **Memória de instruções síncrona (04/11/2026):** a ROM é lida com o próximo PC e a instrução fica num registrador atualizado na mesma borda que o PC. Continua monociclo; a leitura da ROM sai do início de todos os caminhos de timing.
 
 ## 5. Organização dos arquivos
 
@@ -212,7 +212,7 @@ Por enquanto **não serão implementados** traps nem tratamento de desalinhament
 3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4` (até `0x0FFF` com o padrão); o comentário do `data_memory` foi corrigido.
 4. **Loads/stores MMIO parciais:** byte/halfword em MMIO usam as mesmas lanes e extensão de sinal da RAM (seção 2.3).
 5. **Caminhos de memória:** os `.mem` ficam só em `sources_1/imports/new/`; o `$readmemh` resolve caminhos relativos ao diretório de execução.
-6. **Reset/estado inicial:** `x1`–`x31` começam em zero por `initial`; o reset zera apenas o PC.
+6. **Reset/estado inicial:** `x1`–`x31` começam em zero por `initial`; o reset leva o próximo PC a 0 (PC = 0 e instrução registrada = palavra 0). Na carga do FPGA, a instrução registrada já nasce com a palavra 0.
 
 ## 9. Referência de manutenção
 

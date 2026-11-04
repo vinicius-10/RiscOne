@@ -12,7 +12,7 @@
 
 O projeto integra busca, decodificação, execução, acesso à memória e write-back em um datapath RV32I. O PC avança normalmente em 4 bytes ou recebe o destino de um desvio/salto. O core também conecta memória de dados a periféricos mapeados em memória (MMIO): switches, botões, LEDs, display de sete segmentos e linhas/colunas PMOD para teclado matricial.
 
-O estado do PC, as escritas no banco de registradores e as escritas na RAM/MMIO são atualizados na borda de subida do clock. A leitura de instrução, operandos, RAM e entradas MMIO é combinacional.
+O PC, a instrução registrada, as escritas no banco de registradores e as escritas na RAM/MMIO são atualizados na borda de subida do clock. A memória de instruções tem leitura síncrona: é lida com o próximo PC e registra a instrução na mesma borda que o PC, então cada ciclo começa com a instrução pronta (continua uma instrução por ciclo). A leitura de operandos, RAM e entradas MMIO é combinacional.
 
 ## Arquitetura
 
@@ -35,8 +35,8 @@ top_core (pinos da Nexys A7)
 |---|---|
 | `top_core` | Liga clock e reset ao core (invertendo `CPU_RESETN`) e conecta switches, botões, LEDs, display e PMOD às entradas e saídas genéricas de 32 bits do core. |
 | `core` | Conecta os estágios funcionais e distribui dados e controles. Parâmetros incluem largura, profundidade e arquivos de inicialização das memórias. |
-| `search` | Mantém o PC, calcula `PC+4`, escolhe entre avanço sequencial e destino de desvio, e consulta a memória de instruções. |
-| `instruction_memory` | Memória de instruções com leitura combinacional e inicialização por `$readmemh`; endereço é de byte e os bits baixos selecionam palavra alinhada. |
+| `search` | Mantém o PC, calcula `PC+4`, escolhe o próximo PC (reset, avanço sequencial ou destino de desvio) e o entrega ao PC e à memória de instruções na mesma borda. |
+| `instruction_memory` | Memória de instruções com leitura síncrona (ROM em LUTs) e inicialização por `$readmemh`: registra a palavra do próximo PC na mesma borda do PC e nasce com a palavra 0; endereço é de byte e os bits baixos selecionam palavra alinhada. |
 | `decoder` | Extrai campos `rd`, `rs1`, `rs2`, instancia o banco de registradores, o gerador de imediatos e a unidade de controle. |
 | `control_unit` | Decodifica opcode/funct3/funct7 e gera controles da ALU, branches, memória, PC e write-back. |
 | `register_file` | 32 registradores arquiteturais; `x0` é constante zero, duas leituras combinacionais e uma escrita síncrona. Não tem reset. |
@@ -95,7 +95,7 @@ Há testbenches separados para os principais blocos (`tb_alu`, `tb_control_unit`
 
 1. **Condição de branch depende do bit menos significativo:** `alu.alu_lsb_o` é `alu_o[0]` (bit 0 do resultado, não uma flag de zero). O controle usa `OP_CMP` (igualdade) para BEQ/BNE e SLT/SLTU para branches relacionais, então a decisão atual depende do LSB dos resultados de comparação. Alterações na codificação dessas operações devem preservar essa convenção ou substituir por flags explícitas.
 2. **Alinhamento de destino:** `execution` zera somente o bit 0 do endereço de branch/jump. Imediatos B/J já incluem bit 0 zero; a implementação não zera explicitamente os bits `[1:0]`.
-3. **Reset:** `CPU_RESETN` é ativo baixo na placa e invertido em `top_core`; o reset que entra no `core` (`reset_i`) e é encaminhado a `search` é síncrono ativo alto e reinicia apenas o PC. Banco de registradores e RAM não são limpos pelo reset (o banco começa em zero por `initial`).
+3. **Reset:** `CPU_RESETN` é ativo baixo na placa e invertido em `top_core`; o reset que entra no `core` (`reset_i`) e é encaminhado a `search` é síncrono ativo alto e força o próximo PC a 0: o PC zera e a memória de instruções registra a palavra 0. Banco de registradores e RAM não são limpos pelo reset (o banco começa em zero por `initial`). Na carga do FPGA, o PC nasce 0 e a instrução registrada nasce com a palavra 0, então a placa roda sem apertar o reset.
 4. **Instruções inválidas/não suportadas:** a unidade de controle não sinaliza exceção/trap. A decodificação é estrita: opcodes desconhecidos e codificações inválidas (ex.: `funct7` da extensão M, `JALR` com `funct3 ≠ 000`) não escrevem nada e o fluxo sequencial continua.
 5. **MMIO e acessos parciais:** a decodificação de MMIO usa `addr[5:2]` para escolher o registrador; byte/halfword usam a mesma seleção de bytes e extensão de sinal da RAM (`SB`/`SH` alteram só os bytes endereçados).
 6. **Validação de hardware:** este documento descreve a RTL e a configuração encontrada no projeto. Não afirma que bitstream foi gerado nem que o comportamento foi validado na placa.
