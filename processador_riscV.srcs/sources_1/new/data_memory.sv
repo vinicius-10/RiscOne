@@ -23,6 +23,17 @@
 /**
  * @file data_memory.sv
  * @brief Memoria de dados com MMIO embutido para o datapath RV32I.
+ *
+ * O MMIO (addr[31:28] == 4'h4, registrador por addr[5:2]) tem quatro saidas e
+ * quatro entradas genericas de 32 bits; o significado de cada uma na placa e
+ * definido no top_core.
+ *
+ * @param io_in0_i..io_in3_i Entradas genericas, lidas em 0x4000_0010 + 4k
+ *                           (escrita ignorada).
+ * @retval io_out0_o..io_out3_o Registradores de saida, escritos (por faixa de
+ *                              byte) em 0x4000_0000 + 4k. Somente escrita: a
+ *                              leitura desses enderecos devolve 0, o que deixa a
+ *                              sintese remover os bits sem pino no top_core.
  */
 module data_memory
     import mem_pkg::*;
@@ -39,14 +50,16 @@ module data_memory
     input  logic [XLEN-1:0]  data_i,
     output logic [XLEN-1:0]  data_o,
     
-    // Entradas e Saídas físicas dos Periféricos (MMIO)
-    input  logic [15:0]      switch_i,
-    input  logic [4:0]       button_i,
-    input  logic [3:0]       pmod_row_i,
-    
-    output logic [15:0]      led_o,
-    output logic [15:0]      seg7_o,
-    output logic [3:0]       pmod_col_o
+    // Entradas e saídas genéricas de E/S (MMIO)
+    input  logic [31:0]      io_in0_i,
+    input  logic [31:0]      io_in1_i,
+    input  logic [31:0]      io_in2_i,
+    input  logic [31:0]      io_in3_i,
+
+    output logic [31:0]      io_out0_o,
+    output logic [31:0]      io_out1_o,
+    output logic [31:0]      io_out2_o,
+    output logic [31:0]      io_out3_o
 );
 
     // RAM interna: array 1-D de words com escrita por faixa de byte (forma que
@@ -104,7 +117,7 @@ module data_memory
     end
 
     // A selecao de byte/halfword e a extensao de sinal valem tanto para a RAM
-    // quanto para o MMIO (ex.: LBU no byte 1 das chaves retorna switch[15:8]).
+    // quanto para o MMIO (ex.: LBU em 0x4000_0011 retorna io_in0_i[15:8]).
     assign word_data = is_io_space ? io_data_out : ram_word_data;
 
     always_comb begin
@@ -165,46 +178,45 @@ module data_memory
         end
     end
 
-    // Habilitação de escrita para os periféricos de saída individuais
-    logic io_write_leds;
-    logic io_write_seg7;
-    logic io_write_pmod;
+    // Habilitação de escrita das saídas (offsets 0..3); entradas não são graváveis
+    logic io_write_out0;
+    logic io_write_out1;
+    logic io_write_out2;
+    logic io_write_out3;
 
-    assign io_write_leds = mem_write_i && is_io_space && (io_offset == 4'h0);
-    assign io_write_seg7 = mem_write_i && is_io_space && (io_offset == 4'h3);
-    assign io_write_pmod = mem_write_i && is_io_space && (io_offset == 4'h4);
+    assign io_write_out0 = mem_write_i && is_io_space && (io_offset == 4'h0);
+    assign io_write_out1 = mem_write_i && is_io_space && (io_offset == 4'h1);
+    assign io_write_out2 = mem_write_i && is_io_space && (io_offset == 4'h2);
+    assign io_write_out3 = mem_write_i && is_io_space && (io_offset == 4'h3);
 
-    // Registradores síncronos dedicados para os periféricos de saída
+    // Registradores síncronos das saídas
     initial begin
-        led_o      = '0;
-        seg7_o     = '0;
-        pmod_col_o = '0;
+        io_out0_o = '0;
+        io_out1_o = '0;
+        io_out2_o = '0;
+        io_out3_o = '0;
     end
 
     // Escrita por faixa de bytes (mesmos we_byte/wdata da RAM): SB/SH alteram
-    // apenas os bytes enderecados; SW se comporta como antes.
+    // apenas os bytes enderecados.
     always_ff @(posedge clk) begin
-        if (io_write_leds) begin
-            if (we_byte[0]) led_o[7:0]   <= wdata[7:0];
-            if (we_byte[1]) led_o[15:8]  <= wdata[15:8];
+        for (int b = 0; b < 4; b++) begin
+            if (io_write_out0 && we_byte[b]) io_out0_o[8*b +: 8] <= wdata[8*b +: 8];
+            if (io_write_out1 && we_byte[b]) io_out1_o[8*b +: 8] <= wdata[8*b +: 8];
+            if (io_write_out2 && we_byte[b]) io_out2_o[8*b +: 8] <= wdata[8*b +: 8];
+            if (io_write_out3 && we_byte[b]) io_out3_o[8*b +: 8] <= wdata[8*b +: 8];
         end
-        if (io_write_seg7) begin
-            if (we_byte[0]) seg7_o[7:0]  <= wdata[7:0];
-            if (we_byte[1]) seg7_o[15:8] <= wdata[15:8];
-        end
-        if (io_write_pmod && we_byte[0]) pmod_col_o <= wdata[3:0];
     end
 
     // =========================================================================
-    // LEITURA DOS PERIFÉRICOS (Mapeamento de Entrada / Estado)
+    // LEITURA DO MMIO: entradas em 0x10..0x1C; saídas (0x00..0x0C) leem 0
     // =========================================================================
     always_comb begin
         case (io_offset)
-            4'h0:    io_data_out = {16'h0, led_o};       // Lê estado atual dos LEDs
-            4'h1:    io_data_out = {16'h0, switch_i};    // Lê as Chaves (Switches)
-            4'h2:    io_data_out = {27'h0, button_i};    // Lê os Botões
-            4'h3:    io_data_out = {16'h0, seg7_o};      // Lê Display de 7 Segmentos
-            4'h4:    io_data_out = {28'h0, pmod_row_i};  // Lê Teclado Matricial (Linhas)
+            4'h4:    io_data_out = io_in0_i;
+            4'h5:    io_data_out = io_in1_i;
+            4'h6:    io_data_out = io_in2_i;
+            4'h7:    io_data_out = io_in3_i;
             default: io_data_out = 32'h0;
         endcase
     end

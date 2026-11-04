@@ -42,22 +42,20 @@ module tb_program;
 
     logic        clk;
     logic        reset;
-    logic [15:0] switch_i;
-    logic [4:0]  button_i;
-    logic [3:0]  pmod_row_i;
-    logic [15:0] led_o;
-    logic [15:0] seg7_o;
-    logic [3:0]  pmod_col_o;
+    logic [31:0] io_in0_i, io_in1_i, io_in2_i, io_in3_i;
+    logic [31:0] io_out0_o, io_out1_o, io_out2_o, io_out3_o;
 
     core dut (
         .clk        (clk),
         .reset_i    (reset),
-        .switch_i   (switch_i),
-        .button_i   (button_i),
-        .pmod_row_i (pmod_row_i),
-        .led_o      (led_o),
-        .seg7_o     (seg7_o),
-        .pmod_col_o (pmod_col_o)
+        .io_in0_i   (io_in0_i),
+        .io_in1_i   (io_in1_i),
+        .io_in2_i   (io_in2_i),
+        .io_in3_i   (io_in3_i),
+        .io_out0_o  (io_out0_o),
+        .io_out1_o  (io_out1_o),
+        .io_out2_o  (io_out2_o),
+        .io_out3_o  (io_out3_o)
     );
 
     initial clk = 1'b0;
@@ -67,9 +65,10 @@ module tb_program;
     logic [31:0] a0;
 
     initial begin
-        switch_i   = SWITCH_VAL;
-        button_i   = '0;
-        pmod_row_i = '0;
+        io_in0_i = {16'h0, SWITCH_VAL};   // chaves na placa
+        io_in1_i = '0;
+        io_in2_i = '0;
+        io_in3_i = '0;
 
         // Reset sincrono: mantem reset (ativo alto) por algumas bordas.
         reset = 1'b1;
@@ -101,7 +100,7 @@ module tb_program;
 
         a0 = dut.decoder_inst.register_file_inst.register_file[10];
         $display(" _halt em PC = 0x%08h apos %0d ciclos", dut.pc, cycles);
-        $display(" a0 (retorno de main) = %0d | LEDs = 0x%04h", $signed(a0), led_o);
+        $display(" a0 (retorno de main) = %0d | LEDs = 0x%04h", $signed(a0), io_out0_o[15:0]);
 
         if (a0 == 32'd0) begin
             $display("[PASS] main() retornou 0");

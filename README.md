@@ -33,7 +33,7 @@ top_core (pinos da Nexys A7)
 
 | Módulo | Papel |
 |---|---|
-| `top_core` | Liga clock, reset, switches, botões, LEDs, display e sinais PMOD da placa ao core. |
+| `top_core` | Liga clock e reset ao core (invertendo `CPU_RESETN`) e conecta switches, botões, LEDs, display e PMOD às entradas e saídas genéricas de 32 bits do core. |
 | `core` | Conecta os estágios funcionais e distribui dados e controles. Parâmetros incluem largura, profundidade e arquivos de inicialização das memórias. |
 | `search` | Mantém o PC, calcula `PC+4`, escolhe entre avanço sequencial e destino de desvio, e consulta a memória de instruções. |
 | `instruction_memory` | Memória de instruções com leitura combinacional e inicialização por `$readmemh`; endereço é de byte e os bits baixos selecionam palavra alinhada. |
@@ -64,13 +64,18 @@ top_core (pinos da Nexys A7)
 - RAM de dados ocupa endereços baixos até `MEM_DEPTH * 4 - 1` (padrão: `0x0000_0FFF`). A organização interna é por bytes agrupados em palavras.
 - Espaço MMIO é reconhecido quando `addr[31:28] == 4'h4` (base `0x4000_0000`); o offset do registrador vem de `addr[5:2]`.
 
-| Endereço base | Leitura | Escrita |
-|---|---|---|
-| `0x4000_0000` | Estado dos LEDs | Atualiza LEDs `[15:0]` |
-| `0x4000_0004` | Switches `[15:0]` | — |
-| `0x4000_0008` | Botões `[4:0]` | — |
-| `0x4000_000C` | Estado do display | Atualiza display `[15:0]` |
-| `0x4000_0010` | Linhas PMOD `[3:0]` | Atualiza colunas PMOD `[3:0]` |
+O core tem 4 saídas e 4 entradas genéricas de 32 bits (`io_out0_o` … `io_out3_o`, `io_in0_i` … `io_in3_i`); o `top_core` liga cada uma a um periférico da placa.
+
+| Endereço base | Leitura | Escrita | Na placa |
+|---|---|---|---|
+| `0x4000_0000` | 0 (somente escrita) | `io_out0` | LEDs `[15:0]` |
+| `0x4000_0004` | 0 (somente escrita) | `io_out1` | Display 7 seg `[15:0]` |
+| `0x4000_0008` | 0 (somente escrita) | `io_out2` | Colunas PMOD `[3:0]` |
+| `0x4000_000C` | 0 (somente escrita) | `io_out3` | livre |
+| `0x4000_0010` | `io_in0` | — | Switches `[15:0]` |
+| `0x4000_0014` | `io_in1` | — | Botões `[4:0]` |
+| `0x4000_0018` | `io_in2` | — | Linhas PMOD `[3:0]` |
+| `0x4000_001C` | `io_in3` | — | livre (lê 0) |
 
 As saídas MMIO são inicializadas em zero no bloco `initial`; entradas vêm diretamente dos pinos. Os arquivos de memória são carregados por `$readmemh` e ficam somente em `processador_riscV.srcs/sources_1/imports/new/` (cópia referenciada pelo projeto Vivado).
 

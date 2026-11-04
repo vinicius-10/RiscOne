@@ -35,8 +35,10 @@
  * memoria para retornar ao banco de registradores. Desvios tomados encaminham
  * o endereco calculado pela unidade de execucao ao PC.
  *
- * A interface externa contem somente clock e reset. Os sinais de PC,
- * instrucao e resultados permanecem internos ao modulo. O banco de
+ * A interface externa contem clock, reset e as quatro entradas e quatro
+ * saidas genericas de E/S (MMIO) de 32 bits; o significado de cada uma na
+ * placa e definido no top_core. Os sinais de PC, instrucao e resultados
+ * permanecem internos ao modulo. O banco de
  * registradores nao possui reset; `reset_i` reinicia somente o PC por meio do
  * modulo `search`.
  *
@@ -44,12 +46,15 @@
  * @param MEM_DEPTH Numero de palavras na memoria de instrucoes e na memoria de
  *                  dados. Padrao: 1024.
  * @param INSTR_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
- *                       instrucoes. Padrao: `program_bytes.hex`.
+ *                       instrucoes. Padrao: `program_bytes.mem`.
  * @param DATA_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
- *                      dados. Padrao: `data.hex`.
+ *                      dados. Padrao: `data.mem`.
  * @param clk Clock do processador; PC, escritas no banco de registradores e
  *            escritas na memoria de dados sao atualizados na borda de subida.
  * @param reset_i Reset sincrono ativo em nivel alto para zerar o PC.
+ * @param io_in0_i..io_in3_i Entradas genericas, lidas em 0x4000_0010 + 4k.
+ * @retval io_out0_o..io_out3_o Saidas genericas, somente escrita, em
+ *                              0x4000_0000 + 4k (a leitura devolve 0).
  */
 module core #(
     parameter int XLEN = 32,
@@ -59,12 +64,14 @@ module core #(
 )(
     input logic clk,
     input logic reset_i,
-    input logic [15:0] switch_i,
-    input logic [4:0] button_i,
-    input logic [3:0] pmod_row_i,
-    output logic [15:0] led_o,
-    output logic [15:0] seg7_o,
-    output logic [3:0] pmod_col_o
+    input logic [31:0] io_in0_i,
+    input logic [31:0] io_in1_i,
+    input logic [31:0] io_in2_i,
+    input logic [31:0] io_in3_i,
+    output logic [31:0] io_out0_o,
+    output logic [31:0] io_out1_o,
+    output logic [31:0] io_out2_o,
+    output logic [31:0] io_out3_o
 );
 
 
@@ -160,12 +167,14 @@ module core #(
         .addr_i      (data_memory_addr),
         .data_i      (rs2_data),
         .data_o      (data_memory_data),
-        .switch_i    (switch_i),
-        .button_i    (button_i),
-        .pmod_row_i  (pmod_row_i),
-        .led_o       (led_o),
-        .seg7_o      (seg7_o),
-        .pmod_col_o  (pmod_col_o)
+        .io_in0_i    (io_in0_i),
+        .io_in1_i    (io_in1_i),
+        .io_in2_i    (io_in2_i),
+        .io_in3_i    (io_in3_i),
+        .io_out0_o   (io_out0_o),
+        .io_out1_o   (io_out1_o),
+        .io_out2_o   (io_out2_o),
+        .io_out3_o   (io_out3_o)
     );
 
     write_back #(.XLEN(XLEN)) write_back_inst (

@@ -39,22 +39,25 @@ Opcode não reconhecido não gera escrita em registrador ou memória nem exceç�
 
 - Memória de instruções de leitura combinacional, inicializada com `$readmemh`.
 - Memória de dados organizada como bytes, com leitura combinacional e escrita na borda de subida.
-- Acesso à RAM e ao MMIO suporta byte, halfword e word; loads suportam extensão com ou sem sinal. Em MMIO, `SB`/`SH` alteram apenas os bytes endereçados do registrador de saída e `LB`/`LBU`/`LH`/`LHU` extraem o byte/halfword endereçado (ex.: `LBU` em `0x4000_0005` retorna `switch[15:8]`).
+- Acesso à RAM e ao MMIO suporta byte, halfword e word; loads suportam extensão com ou sem sinal. Em MMIO, `SB`/`SH` alteram apenas os bytes endereçados do registrador de saída e `LB`/`LBU`/`LH`/`LHU` extraem o byte/halfword endereçado (ex.: `LBU` em `0x4000_0011` retorna `io_in0[15:8]`, as chaves `[15:8]` na placa).
 - Acessos halfword/word desalinhados não são suportados (sem trap): o halfword usa `addr[1]` e a word ignora `addr[1:0]`.
 - Profundidade padrão declarada pelo core: 1024 palavras para cada memória.
 - Arquivos configurados no core: `program_bytes.mem` e `data.mem`.
 
 ### 2.4 Entradas e saídas da placa
 
-O top conecta switches, cinco botões, LEDs, display de sete segmentos e pinos PMOD. A memória de dados expõe esses periféricos via MMIO. As saídas de periférico são registradores inicializados em zero e atualizados sincronamente; entradas são amostradas combinacionalmente.
+O top conecta switches, cinco botões, LEDs, display de sete segmentos e pinos PMOD. O core expõe, via MMIO na memória de dados, 4 saídas e 4 entradas genéricas de 32 bits, e o `top_core` define o que cada uma liga na placa (decisão de 03/11/2026: o core não depende dos periféricos da Nexys A7). As saídas são registradores inicializados em zero e atualizados sincronamente; são somente escrita (a leitura devolve 0), o que deixa a síntese remover os bits sem pino na placa; entradas são amostradas combinacionalmente.
 
-| Endereço | Leitura | Escrita |
-|---|---|---|
-| `0x4000_0000` | Estado dos LEDs | LEDs `[15:0]` |
-| `0x4000_0004` | Switches `[15:0]` | — |
-| `0x4000_0008` | Botões `[4:0]` | — |
-| `0x4000_000C` | Estado do display `[15:0]` | Display `[15:0]` |
-| `0x4000_0010` | Linhas PMOD `[3:0]` | Colunas PMOD `[3:0]` |
+| Endereço | Leitura | Escrita | Na placa |
+|---|---|---|---|
+| `0x4000_0000` | 0 (somente escrita) | `io_out0` | LEDs `[15:0]` |
+| `0x4000_0004` | 0 (somente escrita) | `io_out1` | Display `[15:0]` |
+| `0x4000_0008` | 0 (somente escrita) | `io_out2` | Colunas PMOD `[3:0]` |
+| `0x4000_000C` | 0 (somente escrita) | `io_out3` | livre |
+| `0x4000_0010` | `io_in0` | — | Switches `[15:0]` |
+| `0x4000_0014` | `io_in1` | — | Botões `[4:0]` |
+| `0x4000_0018` | `io_in2` | — | Linhas PMOD `[3:0]` |
+| `0x4000_001C` | `io_in3` | — | livre (lê 0) |
 
 O espaço MMIO é identificado por `addr[31:28] == 4'h4`; o offset do registrador usa `addr[5:2]`. A RAM ocupa os endereços baixos válidos, limitados pela profundidade parametrizada.
 
@@ -75,7 +78,7 @@ top_core (interface dos pinos da Nexys A7)
 
 | Bloco | Responsabilidade |
 |---|---|
-| `top_core` | Traduz os pinos da placa para os sinais do core e retorna LEDs, display e PMOD. |
+| `top_core` | Inverte `CPU_RESETN` e liga os pinos da placa às entradas e saídas genéricas de 32 bits do core (LEDs, display, PMOD, switches, botões). |
 | `core` | Integra PC/busca, decode, execução, memória e write-back; encaminha parâmetros de memória. |
 | `search` | Mantém PC, produz `PC+4`, escolhe PC sequencial ou destino e consulta instrução. |
 | `instruction_memory` | Armazena palavras de instrução e faz leitura combinacional do índice derivado do endereço. |

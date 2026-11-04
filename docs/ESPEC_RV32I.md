@@ -151,7 +151,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 
 | Módulo | Entradas | Saídas | Comportamento |
 | :-- | :-- | :-- | :-- |
-| `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `reset = ~CPU_RESETN` → `core.reset_i`; `button = {BTND,BTNR,BTNL,BTNU,BTNC}`; `seg7[7:0]` → cátodos, `seg7[15:8]` → ânodos |
+| `top_core` | `clk`, `CPU_RESETN`, `switch[15:0]`, `BTNC/U/L/R/D`, `JA[10:7]` (linhas) | `led[15:0]`, `c_7_segment[7:0]`, `a_7_segment[7:0]`, `JA[4:1]` (colunas) | `reset = ~CPU_RESETN` → `core.reset_i`; `io_in0 = {16'b0, switch}`, `io_in1 = {27'b0, BTND,BTNR,BTNL,BTNU,BTNC}`, `io_in2 = {28'b0, JA[10:7]}`, `io_in3 = 0`; `led = io_out0[15:0]`, `c_7_segment = io_out1[7:0]` (cátodos), `a_7_segment = io_out1[15:8]` (ânodos), `JA[4:1] = io_out2[3:0]`; `io_out3` sem ligação |
 | `search` | `clk`, `reset_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; na borda: `reset_i` → PC=0, senão se `pc_write_i`: PC = `pc_branch_i ? new_pc_i : pc_next` |
 | `instruction_memory` | `addr_i` | `instr_o` | ROM de palavras, leitura combinacional por `addr_i[..:2]`, carregada de `MEM_FILE` |
 | `decoder` | `clk`, `instruction_i`, `written_data_i` | `rs1_o`, `rs2_o`, `imm_o` + todas as saídas do `control_unit` | rd=`[11:7]`, rs1=`[19:15]`, rs2=`[24:20]` |
@@ -160,7 +160,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `control_unit` | `instruction_i` | §5.1 | §5 |
 | `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o` | §5.2; `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B) |
 | `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o`, `alu_lsb_o` | §6 |
-| `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `data_i`, `switch_i`, `button_i`, `pmod_row_i` | `data_o`, `led_o`, `seg7_o`, `pmod_col_o` | §9 |
+| `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `data_i`, `io_in0_i` … `io_in3_i` (32 bits) | `data_o`, `io_out0_o` … `io_out3_o` (32 bits) | §9 |
 | `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
 
 ## 8. Ligações entre os blocos (`core`)
@@ -187,7 +187,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `mem_to_reg` | `decoder.write_back_mem_to_reg_o` | `write_back.mem_to_reg_i` |
 | `write_back_data` | `write_back.wb_data_o` | `decoder.written_data_i` → `register_file` |
 | `register_write_enable` | `decoder.register_file_written_enable_o` | `register_file.written_enable_i` (interno ao decoder) |
-| `switch_i`, `button_i`, `pmod_row_i` / `led_o`, `seg7_o`, `pmod_col_o` | pinos via `top_core` | `data_memory` (MMIO) |
+| `io_in0_i` … `io_in3_i` / `io_out0_o` … `io_out3_o` | portas do `core` (ligadas aos pinos no `top_core`) | `data_memory` (MMIO) |
 
 Fluxo de um ciclo:
 
@@ -207,14 +207,22 @@ PC ─► instruction_memory ─► decoder ─┬─ rs1/rs2/imm ─► executi
 - Endereço fora da RAM (e fora do MMIO) lê 0 e ignora escrita.
 - MMIO: `addr[31:28] == 4'h4`, registrador escolhido por `addr[5:2]`. Mesmas lanes de byte e
   extensão de sinal da RAM.
+- 4 saídas e 4 entradas genéricas de 32 bits; o que cada uma liga na placa é definido no
+  `top_core`. Saídas: registradores (`initial` em zero, sem reset), escritos por faixa de byte,
+  somente escrita (a leitura devolve 0, para a síntese remover os bits sem pino). Entradas: lidas
+  combinacionalmente; escrita nelas é ignorada. Offsets
+  `addr[5:2]` de 8 a 15 leem 0 e ignoram escrita.
 
-| Endereço | Registrador | Acesso |
-| :-- | :-- | :-- |
-| `0x4000_0000` | LEDs `led_o[15:0]` | L/E |
-| `0x4000_0004` | chaves `switch_i[15:0]` | L |
-| `0x4000_0008` | botões `button_i[4:0]` | L |
-| `0x4000_000C` | display 7 seg `seg7_o[15:0]` | L/E |
-| `0x4000_0010` | PMOD: lê linhas `pmod_row_i[3:0]`, escreve colunas `pmod_col_o[3:0]` | L/E |
+| Endereço | Registrador | Acesso | Na Nexys A7 (`top_core`) |
+| :-- | :-- | :-- | :-- |
+| `0x4000_0000` | `io_out0_o[31:0]` | E (lê 0) | LEDs `[15:0]` |
+| `0x4000_0004` | `io_out1_o[31:0]` | E (lê 0) | 7 segmentos: `[7:0]` cátodos, `[15:8]` ânodos |
+| `0x4000_0008` | `io_out2_o[31:0]` | E (lê 0) | colunas do PMOD `[3:0]` |
+| `0x4000_000C` | `io_out3_o[31:0]` | E (lê 0) | livre |
+| `0x4000_0010` | `io_in0_i[31:0]` | L | chaves `[15:0]` |
+| `0x4000_0014` | `io_in1_i[31:0]` | L | botões `{BTND,BTNR,BTNL,BTNU,BTNC}` |
+| `0x4000_0018` | `io_in2_i[31:0]` | L | linhas do PMOD `[3:0]` |
+| `0x4000_001C` | `io_in3_i[31:0]` | L | livre (lê 0) |
 
 ## 10. Fora do escopo (decisão de 31/10/2026, pode ser revista)
 

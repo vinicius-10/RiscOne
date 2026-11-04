@@ -21,16 +21,20 @@ O alvo é **RV32I puro, monociclo, Harvard, sem CSRs/traps**. Código que seria 
 | :-- | :-- | :-- |
 | IMEM `0x0000`–`0x0FFF` | instruções (`program_bytes.mem`) | **loads não leem a IMEM** |
 | DMEM `0x0000`–`0x0FFF` | `.rodata`, `.data`, `.bss`, pilha (`data.mem`) | pilha começa em `0x1000` e desce |
-| `0x4000_0000` | LEDs `[15:0]` | L/E |
-| `0x4000_0004` | chaves `[15:0]` | L |
-| `0x4000_0008` | botões `{BTND,BTNR,BTNL,BTNU,BTNC}` | L |
-| `0x4000_000C` | 7 segmentos: `[7:0]` cátodos, `[15:8]` ânodos | L/E |
-| `0x4000_0010` | PMOD: lê linhas `[3:0]`, escreve colunas `[3:0]` | L/E |
+| `0x4000_0000` | `IO_OUT(0)` = `LEDS` `[15:0]` | E (lê 0) |
+| `0x4000_0004` | `IO_OUT(1)` = `SEG7`: `[7:0]` cátodos, `[15:8]` ânodos | E (lê 0) |
+| `0x4000_0008` | `IO_OUT(2)` = `PMOD_COL`: colunas `[3:0]` | E (lê 0) |
+| `0x4000_000C` | `IO_OUT(3)`: livre | E (lê 0) |
+| `0x4000_0010` | `IO_IN(0)` = `SWITCHES` `[15:0]` | L |
+| `0x4000_0014` | `IO_IN(1)` = `BUTTONS` `{BTND,BTNR,BTNL,BTNU,BTNC}` | L |
+| `0x4000_0018` | `IO_IN(2)` = `PMOD_ROW`: linhas `[3:0]` | L |
+| `0x4000_001C` | `IO_IN(3)`: livre (lê 0) | L |
 
 - IMEM e DMEM começam ambas em 0 (Harvard). **Constantes, strings, tabelas de `switch` e de ponteiros de função precisam estar na DMEM** — o `sw/common/link.ld` já coloca `.rodata` lá. Em `.S`, nunca ponha dados em `.text` esperando lê-los com `lw`: declare-os em `.data` ou `.section .rodata`.
 - 4 KiB por memória (`MEM_DEPTH = 1024`). O `build_sw.ps1` falha se o código passar de 4 KiB ou se dados+bss deixarem menos de 256 B para a pilha.
 - Fora da RAM e fora do MMIO: leitura dá 0 e escrita é ignorada (sem erro).
-- Em C, use `sw/common/mmio.h` (`LEDS`, `SWITCHES`, `BUTTONS`, `SEG7`, `PMOD`, `BTN_*`). Acessos MMIO precisam de `volatile` (o header já faz).
+- Os 8 registradores MMIO têm 32 bits. As saídas são **somente escrita**: ler `0x4000_0000`–`0x0C` devolve 0, então guarde o valor numa variável se precisar alterá-lo depois (ex.: acender um LED sem apagar os outros). Escrita em entrada é ignorada. O significado de cada um na placa vem do `top_core`; bits sem pino na placa são descartados pela síntese.
+- Em C, use `sw/common/mmio.h` (`LEDS`, `SEG7`, `PMOD_COL`, `SWITCHES`, `BUTTONS`, `PMOD_ROW`, `BTN_*`, ou os genéricos `IO_OUT(n)`/`IO_IN(n)`). Acessos MMIO precisam de `volatile` (o header já faz). Programas compilados antes de 03/11/2026 usam o mapa antigo (chaves em `0x…04`): recompile.
 
 ## 3. Partida, retorno e reset
 

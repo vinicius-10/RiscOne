@@ -54,15 +54,15 @@ module tb_core;
     localparam logic [31:0] ECALL  = 32'h0000_0073;
     localparam logic [31:0] FENCE  = 32'h0000_000F;
     localparam logic [31:0] IO     = 32'h4000_0000;
-    localparam logic [15:0] SWITCH = 16'hA5F0;
+    localparam logic [31:0] IN0    = 32'h0000_A5F0; // entrada 0 (chaves na placa)
+    localparam logic [31:0] IN3    = 32'h8000_00F0; // entrada 3: bit 31 = 1 para testar sinal
 
     // ------------------------------------------------------------------
     // DUT
     // ------------------------------------------------------------------
     logic        clk = 1'b0;
     logic        reset = 1'b1;
-    logic [15:0] led, seg7;
-    logic [3:0]  pmod_col;
+    logic [31:0] io_out0, io_out1, io_out2, io_out3;
 
     core #(
         .XLEN(32),
@@ -70,12 +70,14 @@ module tb_core;
     ) dut (
         .clk        (clk),
         .reset_i    (reset),
-        .switch_i   (SWITCH),
-        .button_i   (5'b00000),
-        .pmod_row_i (4'b0000),
-        .led_o      (led),
-        .seg7_o     (seg7),
-        .pmod_col_o (pmod_col)
+        .io_in0_i   (IN0),
+        .io_in1_i   (32'h0),
+        .io_in2_i   (32'h0),
+        .io_in3_i   (IN3),
+        .io_out0_o  (io_out0),
+        .io_out1_o  (io_out1),
+        .io_out2_o  (io_out2),
+        .io_out3_o  (io_out3)
     );
 
     always #5 clk = ~clk;
@@ -127,7 +129,7 @@ module tb_core;
     // ------------------------------------------------------------------
     // Tabela do programa e efeitos esperados
     // ------------------------------------------------------------------
-    typedef enum {K_REG, K_MEM, K_LED, K_SEG, K_PMOD, K_NONE, K_TRAP, K_HALT} kind_e;
+    typedef enum {K_REG, K_MEM, K_OUT0, K_OUT1, K_OUT2, K_OUT3, K_NONE, K_TRAP, K_HALT} kind_e;
 
     typedef struct {
         string       name;
@@ -320,18 +322,24 @@ module tb_core;
         // ---------------- MMIO ----------------
         reg_op("lui  x12, 0x40000",      enc_u(LUI, 20'h40000, 12), 12, IO);
         reg_op("addi x13, x0, 0x5A5",    enc_i(OPI, 'h5A5, 0, 3'b000, 13), 13, 32'h5A5);
-        add("sw   x13, 0(x12) -> LEDs",  enc_s(0, 13, 12, 3'b010), K_LED, 0, 32'h05A5);
-        reg_op("lw   x14, 0(x12) (le LEDs)", enc_i(LD, 0, 12, 3'b010, 14), 14, 32'h05A5);
-        add("sb   x1, 1(x12) -> LEDs[15:8]", enc_s(1, 1, 12, 3'b000), K_LED, 0,
+        // Saidas out0..out3 em 0x00..0x0C (somente escrita, leem 0); entradas in0..in3 em 0x10..0x1C (L)
+        add("sw   x13, 0(x12) -> out0",  enc_s(0, 13, 12, 3'b010), K_OUT0, 0, 32'h05A5);
+        reg_op("lw   x14, 0(x12) (out0 le 0)", enc_i(LD, 0, 12, 3'b010, 14), 14, 32'h0);
+        add("sb   x1, 1(x12) -> out0[15:8]", enc_s(1, 1, 12, 3'b000), K_OUT0, 0,
             {16'h0, x1_jal[7:0], 8'hA5});
-        reg_op("lw   x15, 4(x12) (chaves)",  enc_i(LD, 4, 12, 3'b010, 15), 15, {16'h0, SWITCH});
-        reg_op("lbu  x16, 4(x12) (chaves)",  enc_i(LD, 4, 12, 3'b100, 16), 16, {24'h0, SWITCH[7:0]});
-        reg_op("lb   x17, 4(x12) (chaves)",  enc_i(LD, 4, 12, 3'b000, 17), 17, {{24{SWITCH[7]}}, SWITCH[7:0]});
-        reg_op("lbu  x18, 5(x12) (chaves)",  enc_i(LD, 5, 12, 3'b100, 18), 18, {24'h0, SWITCH[15:8]});
-        reg_op("lh   x19, 4(x12) (chaves)",  enc_i(LD, 4, 12, 3'b001, 19), 19, {{16{SWITCH[15]}}, SWITCH});
-        reg_op("lhu  x20, 4(x12) (chaves)",  enc_i(LD, 4, 12, 3'b101, 20), 20, {16'h0, SWITCH});
-        add("sh   x2, 12(x12) -> 7seg",   enc_s(12, 2, 12, 3'b001), K_SEG, 0, 32'hFFFD);
-        add("sw   x1, 16(x12) -> PMOD",   enc_s(16, 1, 12, 3'b010), K_PMOD, 0, {28'h0, x1_jal[3:0]});
+        reg_op("lw   x15, 16(x12) (in0)",  enc_i(LD, 16, 12, 3'b010, 15), 15, IN0);
+        reg_op("lbu  x16, 16(x12) (in0)",  enc_i(LD, 16, 12, 3'b100, 16), 16, {24'h0, IN0[7:0]});
+        reg_op("lb   x17, 16(x12) (in0)",  enc_i(LD, 16, 12, 3'b000, 17), 17, {{24{IN0[7]}}, IN0[7:0]});
+        reg_op("lbu  x18, 17(x12) (in0)",  enc_i(LD, 17, 12, 3'b100, 18), 18, {24'h0, IN0[15:8]});
+        reg_op("lh   x19, 16(x12) (in0)",  enc_i(LD, 16, 12, 3'b001, 19), 19, {{16{IN0[15]}}, IN0[15:0]});
+        reg_op("lhu  x20, 16(x12) (in0)",  enc_i(LD, 16, 12, 3'b101, 20), 20, {16'h0, IN0[15:0]});
+        add("sh   x2, 4(x12) -> out1",    enc_s(4, 2, 12, 3'b001), K_OUT1, 0, 32'hFFFD);
+        add("sw   x1, 8(x12) -> out2",    enc_s(8, 1, 12, 3'b010), K_OUT2, 0, x1_jal);
+        // Saida e entrada com os 32 bits
+        add("sw   x12, 12(x12) -> out3",  enc_s(12, 12, 12, 3'b010), K_OUT3, 0, IO);
+        reg_op("lw   x24, 12(x12) (out3 le 0)", enc_i(LD, 12, 12, 3'b010, 24), 24, 32'h0);
+        reg_op("lb   x25, 31(x12) (in3[31:24])", enc_i(LD, 31, 12, 3'b000, 25), 25,
+               {{24{IN3[31]}}, IN3[31:24]});
 
         // ---------------- Instrucoes nao suportadas / invalidas ----------------
         add("ecall (NOP)", ECALL, K_NONE);
@@ -416,14 +424,15 @@ module tb_core;
             case (s.kind)
                 K_REG:  got = reg_val(s.rd);
                 K_MEM:  got = ram_word(s.addr);
-                K_LED:  got = {16'h0, led};
-                K_SEG:  got = {16'h0, seg7};
-                K_PMOD: got = {28'h0, pmod_col};
+                K_OUT0: got = io_out0;
+                K_OUT1: got = io_out1;
+                K_OUT2: got = io_out2;
+                K_OUT3: got = io_out3;
                 default: got = s.val;
             endcase
             if (got !== s.val)
                 fail($sformatf("PC %h %-40s: obtido %h, esperado %h", pc, s.name, got, s.val));
-            else if (s.kind inside {K_REG, K_MEM, K_LED, K_SEG, K_PMOD})
+            else if (s.kind inside {K_REG, K_MEM, K_OUT0, K_OUT1, K_OUT2, K_OUT3})
                 $display("[PASS] PC %h %-40s = %h", pc, s.name, got);
 
             if (s.kind == K_HALT) halted = 1;

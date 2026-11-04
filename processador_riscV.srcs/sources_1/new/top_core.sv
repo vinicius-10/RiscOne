@@ -35,32 +35,37 @@ module top_core (
     inout  wire  [10:1] JA
 );
 
-    logic [3:0] pmod_col;
-    logic [3:0] pmod_row;
-    logic [15:0] seg7;
-    logic [4:0] button;
+    logic [3:0]  pmod_row;
+    logic [31:0] io_out0, io_out1, io_out2;
+
+    // Entradas genericas do core (lidas em 0x4000_0010 + 4k):
+    //   in0 = chaves, in1 = {BTND, BTNR, BTNL, BTNU, BTNC}, in2 = linhas PMOD, in3 livre.
+    // Saidas genericas (escritas em 0x4000_0000 + 4k):
+    //   out0 = LEDs, out1 = 7 seg ([7:0] catodos, [15:8] anodos), out2 = colunas PMOD, out3 livre.
 
     // JA[1:4] dirigem as colunas; JA[7:10] recebem as linhas do teclado.
-    assign JA[4:1]  = pmod_col;
+    assign JA[4:1]  = io_out2[3:0];
     assign JA[10:7] = 4'bzzzz;
     assign pmod_row = JA[10:7];
 
-    assign button = {BTND, BTNR, BTNL, BTNU, BTNC};
-    assign c_7_segment = seg7[7:0];
-    assign a_7_segment = seg7[15:8];
-    
+    assign led         = io_out0[15:0];
+    assign c_7_segment = io_out1[7:0];
+    assign a_7_segment = io_out1[15:8];
+
     logic reset;
     // CPU_RESETN e ativo em nivel baixo; core espera reset ativo em nivel alto.
     assign reset = ~CPU_RESETN;
-    
+
     core core_inst (
         .clk         (clk),
         .reset_i     (reset),
-        .switch_i    (switch),
-        .button_i    (button),
-        .pmod_row_i  (pmod_row),
-        .led_o       (led),
-        .seg7_o      (seg7),
-        .pmod_col_o  (pmod_col)
+        .io_in0_i    ({16'b0, switch}),
+        .io_in1_i    ({27'b0, BTND, BTNR, BTNL, BTNU, BTNC}),
+        .io_in2_i    ({28'b0, pmod_row}),
+        .io_in3_i    (32'b0),
+        .io_out0_o   (io_out0),
+        .io_out1_o   (io_out1),
+        .io_out2_o   (io_out2),
+        .io_out3_o   ()
     );
 endmodule

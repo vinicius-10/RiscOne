@@ -9,7 +9,7 @@
 // Target Devices: Artix-7 Nexys A7-100T
 // Tool Versions: vivado 2025.2
 // Description: Testbench automatizado com verificacao de leituras e escritas
-//              de byte, halfword e word, incluindo inspecao das lanes.
+//              de byte, halfword e word, incluindo inspecao das lanes e o MMIO.
 // Dependencies: data_memory, mem_pkg
 // 
 // Revision:
@@ -27,13 +27,23 @@
  * verificacao compara `data_o` e inspeciona os quatro bytes da palavra
  * enderecada; as escritas sao estimuladas antes da borda de subida.
  *
+ * Na secao de MMIO, verifica a escrita nas quatro saidas de 32 bits
+ * (0x4000_0000..0x0C, somente escrita: a leitura devolve 0), escrita parcial
+ * por faixa de byte, leitura das
+ * quatro entradas (0x4000_0010..0x1C) com extensao de sinal, escritas que devem
+ * ser ignoradas (endereco de entrada, offset fora do mapa, mem_write_i = 0) e
+ * que escritas MMIO nao alcancam a RAM. Todas as saidas sao conferidas em cada
+ * teste.
+ *
  * @param clk Clock usado para sincronizar as escritas.
  * @param mem_write_i Habilitacao de escrita aplicada ao DUT.
  * @param mem_width_i Largura do acesso exercitado.
  * @param mem_signed_i Modo de extensao aplicado nas leituras.
  * @param addr_i Endereco de byte aplicado ao DUT.
  * @param data_i Dado usado nos casos de escrita.
+ * @param io_in0_i..io_in3_i Entradas genericas de E/S aplicadas ao DUT.
  * @retval data_o Valor lido pela memoria.
+ * @retval io_out0_o..io_out3_o Registradores de saida MMIO do DUT.
  */
 
 
@@ -61,6 +71,12 @@ module tb_data_memory;
 
     logic [XLEN-1:0] data_o;
 
+    // Portas genericas de E/S (MMIO)
+    logic [31:0]     io_in0_i, io_in1_i, io_in2_i, io_in3_i;
+    logic [31:0]     io_out0_o, io_out1_o, io_out2_o, io_out3_o;
+
+    localparam logic [31:0] IO_BASE = 32'h4000_0000;
+
     // Contador de falhas
     integer fail_count = 0;
 
@@ -77,7 +93,15 @@ module tb_data_memory;
         .mem_signed_i (mem_signed_i),
         .addr_i       (addr_i),
         .data_i       (data_i),
-        .data_o       (data_o)
+        .data_o       (data_o),
+        .io_in0_i     (io_in0_i),
+        .io_in1_i     (io_in1_i),
+        .io_in2_i     (io_in2_i),
+        .io_in3_i     (io_in3_i),
+        .io_out0_o    (io_out0_o),
+        .io_out1_o    (io_out1_o),
+        .io_out2_o    (io_out2_o),
+        .io_out3_o    (io_out3_o)
     );
     import mem_pkg::*;
 
@@ -121,6 +145,47 @@ module tb_data_memory;
         end
     endtask
 
+    // Aplica um acesso na borda de descida e espera a borda de subida.
+    task automatic mem_access(
+        input logic            we,
+        input mem_width_t      width,
+        input mem_signed_t     sign,
+        input logic [XLEN-1:0] addr,
+        input logic [XLEN-1:0] data
+    );
+        @(negedge clk);
+        mem_write_i  = we;
+        mem_width_i  = width;
+        mem_signed_i = sign;
+        addr_i       = addr;
+        data_i       = data;
+        @(posedge clk);
+    endtask
+
+    // Compara data_o e as quatro saidas MMIO (detecta escrita no registrador errado).
+    task automatic check_mmio(
+        input int              test_num,
+        input string           test_name,
+        input logic [XLEN-1:0] expected_data_o,
+        input logic [31:0]     exp_out0,
+        input logic [31:0]     exp_out1,
+        input logic [31:0]     exp_out2,
+        input logic [31:0]     exp_out3
+    );
+        #1;
+        if (data_o === expected_data_o && io_out0_o === exp_out0 && io_out1_o === exp_out1 &&
+            io_out2_o === exp_out2 && io_out3_o === exp_out3) begin
+            $display("[PASS] Teste %02d: %-48s | DATA_O: 0x%08h | OUT0..3: %08h %08h %08h %08h",
+                     test_num, test_name, data_o, io_out0_o, io_out1_o, io_out2_o, io_out3_o);
+        end else begin
+            $display("[FAIL] Teste %02d: %-48s", test_num, test_name);
+            $display("       DATA_O  -> Obtido: 0x%08h | Esperado: 0x%08h", data_o, expected_data_o);
+            $display("       OUT0..3 -> Obtido: %08h %08h %08h %08h | Esperado: %08h %08h %08h %08h\n",
+                     io_out0_o, io_out1_o, io_out2_o, io_out3_o, exp_out0, exp_out1, exp_out2, exp_out3);
+            fail_count++;
+        end
+    endtask
+
     // =========================================================================
     // 5. SEQUÊNCIA DE TESTES
     // =========================================================================
@@ -132,6 +197,10 @@ module tb_data_memory;
         mem_write_i  = 1'b0;
         mem_width_i  = MEM_WIDTH_WORD;
         mem_signed_i = MEM_SIGNED;
+        io_in0_i     = 32'h89AB_CDEF;
+        io_in1_i     = 32'h0000_001F;
+        io_in2_i     = 32'h8000_0005;
+        io_in3_i     = 32'h7FFF_8001;
 
         $display("\n=========================================================================");
         $display("     INICIANDO BATERIA DE TESTES - MÓDULO DE MEMÓRIA (DATA_MEMORY)      ");
@@ -332,6 +401,118 @@ module tb_data_memory;
         mem_signed_i = MEM_SIGNED;          // Sinalização: Com sinal
         @(posedge clk);
         check_result(20, "Leitura Word: Verifica modificacao de byte (0xCAFE00BE)", 32'hCAFE_00BE);
+
+        // ---------------------------------------------------------------------
+        // SEÇÃO 5: MMIO - SAÍDAS 0x4000_0000..0x0C (E, leem 0), ENTRADAS 0x10..0x1C (L)
+        // ---------------------------------------------------------------------
+
+        // Palavra 0 da RAM: mesmo indice de palavra que io_out0 (0x4000_0000)
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, 32'h0000_0000, 32'h0BAD_F00D);
+        check_result(21, "RAM: SW 0x0BADF00D no addr 0x00", 32'h0BAD_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h00, 32'h0);
+        check_mmio(22, "MMIO: saidas comecam em zero; LW out0 le 0", 32'h0,
+                   32'h0, 32'h0, 32'h0, 32'h0);
+
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h00, 32'h1122_3344);
+        check_mmio(23, "MMIO: SW 0x11223344 em out0", 32'h0,
+                   32'h1122_3344, 32'h0, 32'h0, 32'h0);
+
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h04, 32'hA5A5_5A5A);
+        check_mmio(24, "MMIO: SW 0xA5A55A5A em out1", 32'h0,
+                   32'h1122_3344, 32'hA5A5_5A5A, 32'h0, 32'h0);
+
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h08, 32'hDEAD_BEEF);
+        check_mmio(25, "MMIO: SW 0xDEADBEEF em out2", 32'h0,
+                   32'h1122_3344, 32'hA5A5_5A5A, 32'hDEAD_BEEF, 32'h0);
+
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h0C, 32'hCAFE_F00D);
+        check_mmio(26, "MMIO: SW 0xCAFEF00D em out3", 32'h0,
+                   32'h1122_3344, 32'hA5A5_5A5A, 32'hDEAD_BEEF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h08, 32'h0);
+        check_mmio(27, "MMIO: LW em out2 le 0 (somente escrita)", 32'h0,
+                   32'h1122_3344, 32'hA5A5_5A5A, 32'hDEAD_BEEF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h0C, 32'h0);
+        check_mmio(28, "MMIO: LW em out3 le 0 (somente escrita)", 32'h0,
+                   32'h1122_3344, 32'hA5A5_5A5A, 32'hDEAD_BEEF, 32'hCAFE_F00D);
+
+        // SB/SH alteram so os bytes enderecados (agora tambem os bytes 2 e 3)
+        mem_access(1'b1, MEM_WIDTH_BYTE, MEM_SIGNED, IO_BASE + 32'h03, 32'h0000_0099);
+        check_mmio(29, "MMIO: SB 0x99 no byte 3 de out0", 32'h0,
+                   32'h9922_3344, 32'hA5A5_5A5A, 32'hDEAD_BEEF, 32'hCAFE_F00D);
+
+        mem_access(1'b1, MEM_WIDTH_HALF, MEM_UNSIGNED, IO_BASE + 32'h06, 32'h0000_1234);
+        check_mmio(30, "MMIO: SH 0x1234 na metade alta de out1", 32'h0,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_BEEF, 32'hCAFE_F00D);
+
+        mem_access(1'b1, MEM_WIDTH_BYTE, MEM_UNSIGNED, IO_BASE + 32'h09, 32'h0000_0000);
+        check_mmio(31, "MMIO: SB 0x00 no byte 1 de out2", 32'h0000_0000,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        // Entradas: leitura de 32 bits e extensao de sinal pelo bit 31
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h10, 32'h0);
+        check_mmio(32, "MMIO: LW in0", 32'h89AB_CDEF,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h14, 32'h0);
+        check_mmio(33, "MMIO: LW in1", 32'h0000_001F,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h18, 32'h0);
+        check_mmio(34, "MMIO: LW in2", 32'h8000_0005,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h1C, 32'h0);
+        check_mmio(35, "MMIO: LW in3", 32'h7FFF_8001,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_BYTE, MEM_SIGNED, IO_BASE + 32'h13, 32'h0);
+        check_mmio(36, "MMIO: LB byte 3 de in0 (0x89 -> 0xFFFFFF89)", 32'hFFFF_FF89,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_BYTE, MEM_UNSIGNED, IO_BASE + 32'h13, 32'h0);
+        check_mmio(37, "MMIO: LBU byte 3 de in0 (0x89)", 32'h0000_0089,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_HALF, MEM_SIGNED, IO_BASE + 32'h12, 32'h0);
+        check_mmio(38, "MMIO: LH metade alta de in0 (0xFFFF89AB)", 32'hFFFF_89AB,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_HALF, MEM_UNSIGNED, IO_BASE + 32'h1E, 32'h0);
+        check_mmio(39, "MMIO: LHU metade alta de in3 (0x7FFF)", 32'h0000_7FFF,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_BYTE, MEM_SIGNED, IO_BASE + 32'h18, 32'h0);
+        check_mmio(40, "MMIO: LB byte 0 de in2 (0x05)", 32'h0000_0005,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        // A entrada e lida combinacionalmente: o valor novo aparece sem escrita
+        io_in1_i = 32'hFFFF_0000;
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h14, 32'h0);
+        check_mmio(41, "MMIO: LW in1 apos mudar a entrada", 32'hFFFF_0000,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        // Escritas que nao podem alterar nada
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h10, 32'hFFFF_FFFF);
+        check_mmio(42, "MMIO: SW em endereco de entrada e ignorado", 32'h89AB_CDEF,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b1, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h20, 32'hFFFF_FFFF);
+        check_mmio(43, "MMIO: SW no offset 8 (0x20) e ignorado, le 0", 32'h0000_0000,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, IO_BASE + 32'h0C, 32'hFFFF_FFFF);
+        check_mmio(44, "MMIO: mem_write=0 nao altera out3", 32'h0,
+                   32'h9922_3344, 32'h1234_5A5A, 32'hDEAD_00EF, 32'hCAFE_F00D);
+
+        // As escritas MMIO nao podem ter alcancado a RAM no mesmo indice de palavra
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, 32'h0000_0000, 32'h0);
+        check_result(45, "RAM: palavra 0 intacta apos SW/SB em out0", 32'h0BAD_F00D);
+
+        mem_access(1'b0, MEM_WIDTH_WORD, MEM_SIGNED, 32'h0000_0010, 32'h0);
+        check_result(46, "RAM: palavra 4 intacta apos SW em 0x4000_0010", 32'h12FE_7F80);
 
         // =========================================================================
         // 6. RELATÓRIO FINAL
