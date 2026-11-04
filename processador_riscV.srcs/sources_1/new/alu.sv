@@ -61,11 +61,9 @@ module alu import alu_pkg::*; #(
     logic [XLEN-1:0] b_mux;
     logic [XLEN:0]   add_sub_res; 
 
-    // OP_CMP incluído aqui para forçar a subtração (a - b)
-    assign is_sub = (alu_op_i == OP_SUB)  | 
-                    (alu_op_i == OP_SLT)  | 
-                    (alu_op_i == OP_SLTU) | 
-                    (alu_op_i == OP_CMP);
+    assign is_sub = (alu_op_i == OP_SUB)  |
+                    (alu_op_i == OP_SLT)  |
+                    (alu_op_i == OP_SLTU);
     
     assign b_mux  = is_sub ? ~b_i : b_i;
     assign add_sub_res = a_i + b_mux + is_sub;
@@ -75,8 +73,8 @@ module alu import alu_pkg::*; #(
     assign cmp_sltu = ~add_sub_res[XLEN]; 
     assign cmp_slt  = (a_i[XLEN-1] != b_i[XLEN-1]) ? a_i[XLEN-1] : add_sub_res[XLEN-1];
     
-    // Nova Lógica: Se o resultado da subtração for 0, os operandos são iguais
-    assign cmp_eq   = (add_sub_res[XLEN-1:0] == '0);
+    // Igualdade direta (XOR + redução): não espera a cadeia de carry do somador.
+    assign cmp_eq   = (a_i == b_i);
 
     logic [XLEN-1:0] res_arith;
     assign res_arith = (alu_op_i == OP_SLT)  ? {{(XLEN-1){1'b0}}, cmp_slt}  :
