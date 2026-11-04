@@ -71,7 +71,7 @@ Caminho típico de um monociclo (todos combinacionais em série num ciclo):
 ## Ruído e confiabilidade
 
 - Área pós-síntese é praticamente determinística para o mesmo RTL; diferenças pequenas (dezenas de LUTs) podem ser ruído do otimizador.
-- Timing pós-roteamento varia com o placement: diferenças de WNS abaixo de ~0,2–0,3 ns não provam nada. Na dúvida, rode de novo ou compare também o número de níveis/atraso de lógica do caminho.
+- Timing pós-roteamento varia com o placement: diferenças de WNS abaixo de ~0,5 ns não provam nada (medido em 03/11/2026: dois netlists com 2 LUTs de diferença deram 0,47 ns de diferença). Rodar de novo a mesma entrada dá o mesmo resultado (o fluxo é determinístico), então não serve como teste de ruído; compare o número de níveis e o atraso de lógica do caminho.
 - WHS (hold) negativo pós-roteamento é problema real; pós-síntese pode ser ignorado.
 - Latches inferidos (`Synth 8-327`) são bug de RTL combinacional (atribuição faltando em algum ramo): sempre relatar ao usuário.
 
