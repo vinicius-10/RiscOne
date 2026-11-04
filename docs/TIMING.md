@@ -29,6 +29,9 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | alu_cmp_dedicado | placa | experimento (worktree): `alu_eq_direto` + SLT/SLTU por comparadores dedicados (`<`, `$signed <`) em vez do carry do somador | -3,900 | 71,9 | 1918 | 556 | 71 | 0 | **pior** (+207 LUTs, TNS −1696): o carry do somador já entrega SLT/SLTU de graça |
 | 2026-11-04 | load_regiao_fim | placa | experimento: `data_memory` com seleção de byte/sinal aplicada à RAM e ao MMIO separadamente e região escolhida por último | -4,143 | 70,7 | 1705 | 556 | 67 | 0 | **pior**: a extensão de sinal ficou com 6 LUTs depois da RAM (eram 4). Revertido |
 | 2026-11-04 | addr_fanout128 | placa | experimento: `(* max_fanout = 128 *)` no `word_addr` da `data_memory` | -3,942 | 71,7 | 1710 | 556 | 67 | 0 | **ignorado pela síntese** (a rede continua com fanout 518; o driver é CARRY4). Netlist igual a `alu_eq_direto` ±1 LUT: os 0,47 ns de diferença são ruído de placement. Revertido |
+| 2026-11-04 | dir_synth_perf | placa | só ferramenta: `synth_design -directive PerformanceOptimized` (RTL de `alu_eq_direto`) | -3,470 | 74,2 | 1711 | 556 | 67 | 0 | sem efeito: netlist e resultado idênticos à base |
+| 2026-11-04 | dir_explore | placa | só ferramenta: `place_design` e `route_design` com `-directive Explore` | -3,469 | 74,2 | 1709 | 556 | 67 | 0 | igual à base (5,4 min contra 3,3) |
+| 2026-11-04 | dir_extratiming | placa | só ferramenta: `place_design -directive ExtraTimingOpt` | -3,827 | 72,3 | 1718 | 556 | 67 | 0 | pior. Conclusão da varredura: com este netlist o placer chega a ~−3,47 ns no melhor caso; as diretivas não ajudam |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
