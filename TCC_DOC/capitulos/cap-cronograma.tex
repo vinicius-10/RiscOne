@@ -1,0 +1,39 @@
+\chapter{Cronograma}\label{cap:cronograma}
+
+O cronograma para a execução deste trabalho foi estruturado com base nas sete fases metodológicas descritas na Seção \ref{sec:metodo}, acrescidas de uma atividade final dedicada à entrega da documentação, defesa pública e encerramento do projeto. A distribuição temporal dessas atividades ao longo dos meses está detalhada no Quadro \ref{quad:cronograma_projeto}. 
+
+\begin{tabframed}[htb]%% Ambiente tabframed
+ \caption{Cronograma de atividades do projeto}%% Legenda
+ \label{quad:cronograma_projeto}%% Rótulo
+ \renewcommand{\arraystretch}{1.5}
+ 
+ % Criando um atalho 'C' para uma coluna de tamanho fixo (1.8cm) e centralizada
+ \newcolumntype{C}{>{\centering\arraybackslash}p{1.8cm}}
+ 
+ % A primeira coluna é 'c' (ajusta ao texto "Atividade"), as outras 6 são 'C' (fixas)
+ \begin{tabular}{|c|C|C|C|C|C|C|}
+ \cline{1-7}
+ \multicolumn{1}{|c|}{\textbf{Atividade}} & \textbf{Julho} & \textbf{Agosto} & \textbf{Setembro} & \textbf{Outubro} & \textbf{Novembro} & \textbf{Dezembro}\\ \cline{1-7}
+ \textbf{Etapa 1} & \cellcolor{CronI}   &                     &                     &                     &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 2} & \cellcolor{CronII}  & \cellcolor{CronII}  &                     &                     &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 3} & \cellcolor{CronIII} & \cellcolor{CronIII} &                     &                     &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 4} &                     & \cellcolor{CronIV}  & \cellcolor{CronIV}  &                     &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 5} &                     &                     & \cellcolor{CronV}   & \cellcolor{CronV}   &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 6} &                     &                     &                     & \cellcolor{CronVI}  &                      &                     \\ \cline{1-7}
+ \textbf{Etapa 7} &                     &                     &                     & \cellcolor{CronVII} & \cellcolor{CronVII}  &                     \\ \cline{1-7}
+ \textbf{Defesa}  &                     &                     &                     &                     & \cellcolor{CronVIII} & \cellcolor{CronVIII}\\ \cline{1-7}
+ \end{tabular}
+ \fonte{Autoria própria (2026)}
+ \addcontentsline{loge}{tabframed}{\protect\numberline{\thetabframed}Cronograma de atividades do projeto}
+\end{tabframed}
+
+\begin{itemize}
+    \item \textbf{Etapa 1:} Revisão da arquitetura de computadores;
+    \item \textbf{Etapa 2:} Especificação da ISA RV32I;
+    \item \textbf{Etapa 3:} Análise crítica da literatura e de códigos-fonte correlatos;
+    \item \textbf{Etapa 4:} Implementação e simulação modular dos blocos lógicos;
+    \item \textbf{Etapa 5:} Integração da microarquitetura (caminho de dados e controle);
+    \item \textbf{Etapa 6:} Validação física em hardware e análise de temporização;
+    \item \textbf{Etapa 7:} Consolidação e refinamento do texto final do TCC;
+    \item \textbf{Defesa :} Encerramento do projeto, entrega da documentação definitiva e defesa pública do trabalho.
+\end{itemize}

@@ -1,0 +1,36 @@
+\chapter{Proposta}\label{cap:proposta}
+
+A proposta deste trabalho consiste no estudo e implementação de um processador de ciclo único baseado na ISA RISC-V, utilizando especificamente o conjunto de instruções inteiras base RV32I, com sua posterior validação física em uma matriz de portas programáveis (FPGA) por meio de uma linguagem de descrição de hardware. Mais do que a construção do processador, este projeto busca consolidar conhecimentos práticos no desenvolvimento de sistemas digitais complexos. Para detalhar a execução deste desenvolvimento, este capítulo está estruturado na apresentação das tecnologias e ferramentas adotadas, no método sistemático de projeto e, por fim, na análise do desenvolvimento de cada bloco da microarquitetura.
+
+\section{Tecnologias e ferramentas}
+\label{sec:materias}
+
+%posivelmente irei utiliza o processorCi que comentei na fundamentação teorica, link do github: https://github.com/LSC-Unicamp/processor_ci
+
+Para o desenvolvimento deste trabalho, a implementação e a validação física serão realizadas na placa de desenvolvimento Nexys A7-100T, fabricada pela Digilent, a qual é equipada com o chip FPGA AMD Artix-7 (modelo XC7A100T-1CSG324C). O circuito será descrito utilizando a linguagem de descrição de hardware (HDL, do inglês \textit{Hardware Description Language}) SystemVerilog . Como ambiente de desenvolvimento integrado, adotar-se-á a suíte de ferramentas AMD Vivado™ \textit{Design Suite}, responsável pelas etapas de escrita, simulação comportamental, síntese lógica e geração do arquivo de configuração (bitstream). Adicionalmente, a plataforma GitHub será utilizada para o controle de versionamento e para assegurar a disponibilidade pública do código-fonte do projeto.
+
+A seleção do chip FPGA AMD Artix-7 se dá pelas suas especificações técnicas robustas, adequadas tanto para o escopo atual quanto para expansões futuras do projeto. O componente dispõe de 15.850 \textit{slices} de lógica — cada uma contendo quatro tabelas de busca de 6 entradas (\textit{LUTs}) e oito \textit{flip-flops} —, estrutura responsável pela implementação dos circuitos digitais, além de 4.860~kbits de memória interna em blocos (\textit{Block RAM}). Essa capacidade de hardware mostra-se mais do que suficiente para a implementação proposta, apresentando uma margem de recursos lógicos significativamente superior às utilizadas em trabalhos correlatos da literatura. Adicionalmente, a escolha da placa de desenvolvimento Nexys A7-100T foi motivada pela ampla variedade de periféricos integrados à sua estrutura, o que simplifica e acelera a etapa de testes físicos e validação dos sinais. Por fim, a adoção da suíte AMD Vivado™ decorre do fato de ser a ferramenta oficial do fabricante, garantindo compatibilidade estrita, otimização no mapeamento tecnológico dos blocos lógicos e maior confiabilidade nas simulações do circuito.
+
+A escolha da HDL baseia-se na familiaridade prévia com a linguagem C, cuja proximidade sintática tornou o Verilog uma escolha natural para o desenvolvimento do projeto. Como o SystemVerilog consiste em uma extensão direta do padrão Verilog, sua adoção permitiu alinhar o conhecimento prévio a recursos modernos que facilitam a implementação dos blocos lógicos e a simulação do processador. Adicionalmente, a literatura aponta que a variação de desempenho entre diferentes HDLs não se mostra significativa no resultado final do circuito sintetizado de acordo com \citeonline{vahid2008sistemas}.
+
+\section{Método}
+\label{sec:metodo}
+
+Para o desenvolvimento deste trabalho, optou-se por estruturar as atividades de engenharia e pesquisa em sete etapas consecutivas, descritas a seguir:
+
+\begin{description}
+    \item[Etapa 1: Revisão da Arquitetura de Computadores] Dedicada ao estudo aprofundado dos blocos estruturais de um processador (Unidade de Controle, ALU, Memórias e Interfaces de E/S), analisando suas diretrizes conceituais e estratégias de modelagem em linguagem de descrição de hardware.
+    
+    \item[Etapa 2: Especificação da ISA RV32I] Concentra-se no mapeamento detalhado do conjunto de instruções inteiras base do RISC-V, com o objetivo de levantar os requisitos funcionais, sinais de controle e diagramar o fluxo de dados para a implementação de ciclo único.
+    
+    \item[Etapa 3: Análise Crítica da Literatura e Código-Fonte] Compreende o estudo de trabalhos correlatos por meio do exame de artigos e, quando disponíveis, de seus repositórios de código aberto, extraindo boas práticas de design e técnicas de otimização aplicáveis a este projeto.
+    
+    \item[Etapa 4: Implementação e Simulação Modular] Consiste no desenvolvimento isolado em SystemVerilog de cada componente do \textit{datapath}. Nesta fase, realizam-se simulações comportamentais modulares para garantir que unidades como o Banco de Registradores e a ALU operem perfeitamente de forma individual.
+    
+    \item[Etapa 5: Integração da Microarquitetura] Contempla a união de todos os blocos individuais para compor o processador completo. O foco reside em simular as interconexões e verificar o comportamento da lógica de controle à medida que o caminho de dados é integrado.
+    
+    \item[Etapa 6: Validação Física e Análise de Temporização] Abrange a síntese final do sistema, o mapeamento dos pinos para a placa Nexys A7-100T e a execução física de programas em linguagem \textit{assembly}. É nesta fase que são avaliadas as restrições de tempo (\textit{timing}) e identificados os caminhos críticos do hardware.
+    
+    \item[Etapa 7: Consolidação e Refinamento do Texto] Destina-se à revisão final e ao fechamento da documentação escrita do TCC. Embora o texto seja redigido de forma incremental ao longo de todas etapas, esta etapa realiza os ajustes e adequações necessários para garantir a fluidez, coesão e convergência entre todos os capítulos.
+\end{description}
+

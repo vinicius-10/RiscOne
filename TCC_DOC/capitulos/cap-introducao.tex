@@ -1,0 +1,93 @@
+%%%% CAPÍTULO 1 - INTRODUÇÃO
+%%
+%% Deve apresentar uma visão global da pesquisa, incluindo: breve histórico, importância e justificativa da escolha do tema,
+%% delimitações do assunto, formulação de hipóteses e objetivos da pesquisa e estrutura do trabalho.
+
+%% Título e rótulo de capítulo (rótulos não devem conter caracteres especiais, acentuados ou cedilha)
+\chapter{Introdução}\label{cap:introducao}
+
+%Parte inicial do texto, na qual devem constar o tema e a delimitação do assunto tratado, objetivos da pesquisa e outros elementos necessários para situar o tema do trabalho. \textcolor{red}{Após o início de uma seção, recomenda-se a inserção de um texto ou, no mínimo, uma nota explicativa sobre a seção iniciada. Evitar, por exemplo:}
+
+% Segundo \citeonline{Coulouris2013}.
+
+% Segundo \citeonline[p. 40]{Coulouris2013}.
+
+% Citação no final do Parágrafo~\cite{Coulouris2013}. 
+
+% Citação no final do Parágrafo com número de página~\cite[p. 40]{Coulouris2013}.
+
+% %(Modelo de referência: pessoa jurídica)
+% Citação no final do Parágrafo~\cite{NBR6023:2018}
+
+% %(Modelo de referência: pessoa jurídica)
+% Citação no final do Parágrafo~\cite{NBR6027:2012}
+
+% %(Modelo de referência: pessoa jurídica)
+% Citação no final do Parágrafo~\cite{NBR6028:2021}
+
+% Segundo a \citeonline{NBR14724:2011}.
+
+% Citação no final do Parágrafo~\cite{NBR10520:2002}
+
+% Citação no final do Parágrafo~\cite{NBR14724:2011}.
+
+% % (Modelo de referência de trabalho acadêmico).
+% Citação no final do Parágrafo~\cite{Andrade2005}
+
+% % (Modelo de referência: capítulo de livro).
+% Citação no final do Parágrafo~\cite{Borges2014}
+
+% % (Modelo de referência: leis, decretos, portarias, etc.)
+% Citação no final do Parágrafo~\cite{BRASIL:1998}
+
+% % (Modelo de referência: livro com subtítulo). Nome com sufixo "Von" - Configuração no bib
+% Citação no final do Parágrafo~\cite[p. 66]{KROGH:2001}
+
+% Citação no final do Parágrafo~\cite{Faina2001}
+
+% % (Modelo de referência: livro com subtítulo).
+% Citação no final do Parágrafo~\cite{Davenport2012}
+
+% % (Modelo de referência: artigo de periódico).
+% Citação no final do Parágrafo~\cite{Monteiro2009}
+
+% %(Modelo de referência: artigo de periódico). Nome familiar "Junior"
+% Citação no final do Parágrafo~\cite{Sanches2024}
+
+% % (Modelo de referência: trabalho publicado em evento).
+% Citação no final do Parágrafo~\cite{Renaux2001}
+
+
+Nas últimas décadas, a evolução dos sistemas computacionais transformou profundamente a sociedade moderna. No centro dessa evolução tecnológica estão os processadores e as suas respectivas Arquiteturas de Conjunto de Instruções (ISA, do inglês \textit{Instruction Set Architecture}), as quais atuam como a interface fundamental entre o \textit{software} e o \textit{hardware}. Por muito tempo, as principais ISAs de mercado foram proprietárias e restritas, o que limitava a inovação industrial e o desenvolvimento acadêmico. Nesse cenário, surgiu o RISC-V a partir de um projeto de pesquisa na Universidade da Califórnia em Berkeley com o objetivo de ser uma ISA de código aberto (\textit{open-source}), permitindo seu uso livre de custos de licenciamento e de restrições de propriedade intelectual.
+
+Apesar do avanço gradual do RISC-V no mercado global, a barreira de entrada para o design e a produção de processadores customizados ainda é elevada, complexa e de alto custo. Diante dessa problemática, este trabalho propõe-se a desenvolver um núcleo RISC-V baseado no conjunto de instruções básicas inteiras de 32 bits (RV32I) de ciclo único, visando mitigar essa barreira inicial e servir de alicerce para projetos e expansões futuras. Adicionalmente, com o objetivo de reduzir custos de fabricação, mitigar a complexidade física do projeto e acelerar a etapa de testes práticos, será utilizado para montagem do circuito matrizes de portas programáveis (FPGAs) por meio de linguagens de descrição de hardware (HDL, do inglês \textit{Hardware Description Language}).
+
+\section{Justificativa}
+O avanço da computação tem impulsionado diversas atividades humanas, abrangendo desde sistemas embarcados presentes em eletrodomésticos, veículos e dispositivos vestíveis, até a computação de alto desempenho (HPC, do inglês \textit{High-Performance Computing}). Esse cenário exige constantes evoluções em eficiência energética e poder de processamento, demandas que aumentaram substancialmente com a ascensão da inteligência artificial (AI, do inglês \textit{Artificial Intelligence}), a exemplo dos grandes modelos de linguagem (LLMs, do inglês \textit{Large Language Models}), como o ChatGPT.
+
+Diante desse contexto, as arquiteturas de código aberto vêm ganhando destaque por permitirem implementações livres de \textit{royalties}, maior flexibilidade de desenvolvimento e possibilidade de customização. Nesse contexto, a ISA RISC-V destaca-se por sua modularidade, extensibilidade e adoção por grandes empresas, como a NVIDIA, mostrando-se uma alternativa sólida às arquiteturas proprietárias tradicionais.
+
+A implementação de um processador baseado na arquitetura RISC-V em FPGA busca contribuir para a redução das barreiras de entrada no desenvolvimento de hardware digital, área historicamente associada a uma elevada complexidade técnica e altos custos. Além disso, este projeto pretende fornecer uma base experimental para que trabalhos futuros explorem modificações e extensões de instruções para casos de uso específicos como, por exemplo, a aceleração de servidores de AI, eficiência energética em sistemas embarcados, entre diversas outras aplicações.
+
+\section{Objetivos}
+O presente trabalho tem como objetivo o estudo e a implementação de um processador baseado na arquitetura RISC-V, visando a criação de uma base técnico-científica que possibilite futuras pesquisas e extensões na área de arquitetura de computadores. 
+
+\subsection{Objetivo Geral}
+O objetivo geral deste trabalho é projetar e implementar um processador funcional de ciclo único (\textit{single-cycle}) seguindo o modelo da arquitetura de Harvard compatível com o conjunto de instruções RV32I (conjunto base de 32 bits), conforme as especificações da \citeonline{riscv_manual_2026}. 
+
+\subsection{Objetivos Específicos}
+
+\begin{itemize}
+    \item Analisar detalhadamente o conjunto de instruções RV32I da ISA RISC-V;
+    \item Projetar os componentes internos do processador, incluindo a Unidade Lógica e Aritmética, Unidade de memória e a Unidade de Controle;
+    \item Implementar os módulos do processador utilizando a linguagem de descrição de hardware SystemVerilog;
+    \item Desenvolver \textit{testbenches} individuais para a validação funcional de cada módulo;
+    \item Integrar os componentes ao caminho de dados (\textit{datapath}) e à unidade de controle;
+    \item Desenvolver a interface de entrada/saída (I/O, do ingês \textit{Input} e \textit{output}) para integração com os periféricos da placa Nexys A7 (chaves e LEDs);
+    \item Realizar a síntese lógica, implementação e simulação do projeto no ambiente AMD Vivado;
+    \item Desenvolver programas de teste em linguagem \textit{Assembly} para validar a execução das instruções;
+    \item Validar o funcionamento do protótipo em hardware por meio da programação da FPGA.
+\end{itemize}
+
+\section{Organização do Trabalho}
+Este trabalho está estruturado em cinco capítulos essenciais. O Capítulo \ref{cap:introducao} traz a introdução, apresentando uma visão geral do projeto, seus objetivos e justificativas; o Capítulo \ref{cap:fundamentacao_teorica} aborda a fundamentação teórica, na qual realiza-se uma revisão dos conceitos necessários e uma análise de trabalhos relacionados; o Capítulo \ref{cap:proposta} detalha a proposta do projeto, especificando as ferramentas e a metodologia do que será desenvolvido; o Capítulo \ref{cap:cronograma} apresenta o cronograma de execução das atividades; e, por fim, o Capítulo \ref{cap:conclusoes} encerra o documento com as considerações finais e um retrospecto sobre a viabilidade do trabalho.
