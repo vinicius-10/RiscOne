@@ -44,8 +44,11 @@
  * instrução registrada, que volta à palavra 0) por meio do módulo `search`.
  *
  * @param XLEN Largura dos dados e enderecos. Padrao: 32 bits.
- * @param MEM_DEPTH Numero de palavras na memoria de instrucoes e na memoria de
- *                  dados. Padrao: 1024.
+ * @param INSTR_MEM_DEPTH Número de palavras da memória de instruções. Padrão:
+ *                        1024 (4 KiB).
+ * @param DATA_MEM_DEPTH Número de palavras da RAM de dados. Padrão: 256 (1 KiB,
+ *                       endereços 0x000..0x3FF). Menor que a memória de
+ *                       instruções para encurtar o caminho do load.
  * @param INSTR_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
  *                       instrucoes. Padrao: `program_bytes.mem`.
  * @param DATA_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
@@ -60,7 +63,8 @@
  */
 module core #(
     parameter int XLEN = 32,
-    parameter int MEM_DEPTH = 1024,
+    parameter int INSTR_MEM_DEPTH = 1024,
+    parameter int DATA_MEM_DEPTH = 256,
     parameter string INSTR_MEM_FILE = "program_bytes.mem",
     parameter string DATA_MEM_FILE = "data.mem"
 )(
@@ -109,7 +113,7 @@ module core #(
 
     search #(
         .XLEN(XLEN),
-        .MEM_DEPTH(MEM_DEPTH),
+        .MEM_DEPTH(INSTR_MEM_DEPTH),
         .MEM_FILE(INSTR_MEM_FILE)
     ) search_inst (
         .clk         (clk),
@@ -163,7 +167,7 @@ module core #(
 
     data_memory #(
         .XLEN(XLEN),
-        .MEM_DEPTH(MEM_DEPTH),
+        .MEM_DEPTH(DATA_MEM_DEPTH),
         .MEM_FILE(DATA_MEM_FILE)
     ) data_memory_inst (
         .clk         (clk),

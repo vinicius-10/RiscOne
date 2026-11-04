@@ -145,8 +145,9 @@ dedicado da `execution` (§5.2). SLT e SLTU continuam na ALU para SLT, SLTI, SLT
 
 ```text
 top_core          pinos da placa -> core; inverte CPU_RESETN (reset ativo alto para o core)
-└── core          interliga o datapath; params XLEN, MEM_DEPTH, INSTR_MEM_FILE, DATA_MEM_FILE
-    ├── search            PC + mux PC+4 / alvo de desvio
+└── core          interliga o datapath; params XLEN, INSTR_MEM_DEPTH (1024), DATA_MEM_DEPTH (256),
+                  INSTR_MEM_FILE, DATA_MEM_FILE
+    ├── search            PC + mux do próximo PC (reset / PC+4 / alvo de desvio)
     │   └── instruction_memory
     ├── decoder           separa rd/rs1/rs2 da instrução
     │   ├── register_file
@@ -214,7 +215,8 @@ Fluxo de um ciclo:
 ## 9. Memória de dados e MMIO (`data_memory`)
 
 - RAM: `MEM_DEPTH` palavras × 4 bytes (`0 .. MEM_DEPTH*4-1`), carregada de `DATA_MEM_FILE`
-  (um byte por token hex). Leitura combinacional; escrita na borda com byte-enable
+  (um byte por token hex). No `core`, `MEM_DEPTH = DATA_MEM_DEPTH = 256`: **1 KiB, de `0x000` a
+  `0x3FF`** (a memória de instruções continua com 4 KiB). Leitura combinacional; escrita na borda com byte-enable
   (SB: `0001 << addr[1:0]`; SH: `0011`/`1100` por `addr[1]`; SW: `1111`).
 - Loads: escolhe byte por `addr[1:0]` ou half por `addr[1]` e estende conforme `mem_signed_i`.
 - Endereço fora da RAM (e fora do MMIO) lê 0 e ignora escrita.

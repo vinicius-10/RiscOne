@@ -41,7 +41,7 @@ Opcode não reconhecido não gera escrita em registrador ou memória nem exceç�
 - Memória de dados organizada como bytes, com leitura combinacional e escrita na borda de subida.
 - Acesso à RAM e ao MMIO suporta byte, halfword e word; loads suportam extensão com ou sem sinal. Em MMIO, `SB`/`SH` alteram apenas os bytes endereçados do registrador de saída e `LB`/`LBU`/`LH`/`LHU` extraem o byte/halfword endereçado (ex.: `LBU` em `0x4000_0011` retorna `io_in0[15:8]`, as chaves `[15:8]` na placa).
 - Acessos halfword/word desalinhados não são suportados (sem trap): o halfword usa `addr[1]` e a word ignora `addr[1:0]`.
-- Profundidade padrão declarada pelo core: 1024 palavras para cada memória.
+- Profundidades declaradas pelo core: 1024 palavras (4 KiB) na memória de instruções e 256 palavras (1 KiB, `0x000`–`0x3FF`) na RAM de dados. A RAM foi reduzida em 04/11/2026 porque a menor encurta o caminho do load; os programas usam ~500 B, contando a pilha.
 - Arquivos configurados no core: `program_bytes.mem` e `data.mem`.
 
 ### 2.4 Entradas e saídas da placa
@@ -144,6 +144,7 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 8. **Alinhamento de instrução:** instruções são palavras de 32 bits, indexadas com os bits `[1:0]` descartados.
 9. **Memória de instruções síncrona (04/11/2026):** a ROM é lida com o próximo PC e a instrução fica num registrador atualizado na mesma borda que o PC. Continua monociclo; a leitura da ROM sai do início de todos os caminhos de timing.
 10. **Comparador de desvio dedicado (04/11/2026):** os branches comparam `rs1` com `rs2` direto na `execution`, sem os muxes de operando nem a ALU. O próximo PC deixa de esperar a decodificação da operação da ALU.
+11. **RAM de dados de 1 KiB (04/11/2026):** a RAM tem 256 palavras, contra 1024 da memória de instruções. Isso reduz o fanout do endereço e tira o mux das 4 faixas de LUTRAM do caminho do load.
 
 ## 5. Organização dos arquivos
 
@@ -181,7 +182,7 @@ Testbenches em `sim_1/new/`: `tb_core.sv` (sistema completo), `tb_program.sv` (p
 - RTL em **SystemVerilog** (`.sv`); interfaces usam `logic` e módulos combinacionais usam `always_comb`/`assign`.
 - Estado sequencial usa `always_ff @(posedge clk)`.
 - Sufixo `_i` indica entrada e `_o` indica saída; nomes de sinais procuram refletir o bloco proprietário, por exemplo `execution_alu_control_o`.
-- Larguras configuráveis são parâmetros inteiros como `XLEN` e `MEM_DEPTH`; enums de controle usam tipos definidos em packages (`alu_op_t`, `branch_op_t`, `mem_width_t`, `mem_signed_t`).
+- Larguras configuráveis são parâmetros inteiros como `XLEN`, `INSTR_MEM_DEPTH` e `DATA_MEM_DEPTH`; enums de controle usam tipos definidos em packages (`alu_op_t`, `branch_op_t`, `mem_width_t`, `mem_signed_t`).
 - Imediatos são estendidos conforme formato da instrução; comentário, nomes e documentação predominam em português, ainda que identificadores RTL usem inglês.
 - Testbenches aplicam estímulos e comparam resultados com valores esperados, reportando `[PASS]`/`[FAIL]` e contador de falhas.
 - Arquivos `.runs`, `.sim`, `.cache` e demais saídas do Vivado são artefatos gerados; RTL em `sources_1/new/` é a referência funcional principal.
@@ -210,7 +211,7 @@ Por enquanto **não serão implementados** traps nem tratamento de desalinhament
 
 1. **Flag `alu_lsb_o` (antes `zero_o`):** era `alu_o[0]`, não uma flag de resultado zero, e servia de condição dos branches. Em 04/11/2026 a condição passou para um comparador dedicado na `execution` (`rs1` × `rs2`, escolhido pelo `alu_op_t` do branch). A porta saiu da ALU, junto com o cálculo do `OP_CMP`.
 2. **`SLTU`:** `~carry` de `a + ~b + 1` está correto; coberto por `tb_alu` e `tb_core`.
-3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4` (até `0x0FFF` com o padrão); o comentário do `data_memory` foi corrigido.
+3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4`, ou seja, até `0x03FF` com a RAM de 1 KiB do core; o comentário do `data_memory` foi corrigido.
 4. **Loads/stores MMIO parciais:** byte/halfword em MMIO usam as mesmas lanes e extensão de sinal da RAM (seção 2.3).
 5. **Caminhos de memória:** os `.mem` ficam só em `sources_1/imports/new/`; o `$readmemh` resolve caminhos relativos ao diretório de execução.
 6. **Reset/estado inicial:** `x1`–`x31` começam em zero por `initial`; o reset leva o próximo PC a 0 (PC = 0 e instrução registrada = palavra 0). Na carga do FPGA, a instrução registrada já nasce com a palavra 0.

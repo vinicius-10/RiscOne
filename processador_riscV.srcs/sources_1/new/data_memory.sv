@@ -93,7 +93,7 @@ module data_memory
     // =========================================================================
     // DECODIFICAÇÃO DE ENDEREÇOS
     // Mapeamento:
-    //   - 0x0000_0000 até MEM_DEPTH*4-1 (0x0000_0FFF com MEM_DEPTH = 1024) -> RAM Interna
+    //   - 0x0000_0000 até MEM_DEPTH*4-1 (0x0000_03FF com MEM_DEPTH = 256, o valor do core) -> RAM Interna
     //   - 0x4xxx_xxxx                -> Espaço de I/O (MMIO)
     // As comparações dos bits altos vêm prontas da execution (addr_io_i,
     // addr_page0_i), sem esperar o carry do somador de endereço.

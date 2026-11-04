@@ -70,7 +70,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 selftest        
 powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 leds -Install      # also copies the .mem files to sources_1/imports/new (backs up the old ones)
 ```
 
-- Harvard: IMEM and DMEM both start at 0. `.rodata` (constants, switch tables, function-pointer tables) must live in DMEM because loads can't read IMEM — `link.ld` does this and links with `--no-check-sections`. 4 KiB each (MEM_DEPTH = 1024); stack at the top of DMEM.
+- Harvard: IMEM and DMEM both start at 0. `.rodata` (constants, switch tables, function-pointer tables) must live in DMEM because loads can't read IMEM — `link.ld` does this and links with `--no-check-sections`. IMEM 4 KiB (`INSTR_MEM_DEPTH` = 1024), DMEM **1 KiB** (`DATA_MEM_DEPTH` = 256, `0x000`–`0x3FF`, reduced on 2026-11-04 for timing); stack at the top of DMEM (`0x400`), and `build_sw.ps1` fails if data+bss leave less than 256 B for it.
 - Flags: `-march=rv32i -mabi=ilp32 -msmall-data-limit=0 -ffreestanding -nostdlib` + `-lgcc` (mul/div come from libgcc). `sw/common/libc_min.c` supplies memcpy/memset/memmove/memcmp.
 - `crt0.S` sets sp, zeroes `.bss`, calls `main`, leaves its return in `a0` and spins in `_halt` (`j .` = `0x0000006F`). `.data` is only loaded with the FPGA bitstream — a CPU reset does not restore it.
 - `data.mem` = bytes in address order (byte at address 0 first), assembled by `data_memory`'s `initial` into the little-endian word `mem[w] = {byte 4w+3, …, byte 4w}` (`mem` is a 1-D array of 32-bit words so Vivado infers LUTRAM).
@@ -80,7 +80,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 leds -Install   
 
 ```text
 top_core          board pins -> core; inverts active-low CPU_RESETN into core.reset_i (active high)
-└── core          wires the datapath; params XLEN, MEM_DEPTH, *_MEM_FILE
+└── core          wires the datapath; params XLEN, INSTR_MEM_DEPTH (1024), DATA_MEM_DEPTH (256), *_MEM_FILE
     ├── search ── instruction_memory   PC register + next-PC mux (reset / PC+4 / branch target); the next PC also
     │                                  addresses instruction_memory, a synchronous-read ROM in LUTs that registers
     │                                  the instruction on the same edge as the PC (still single-cycle, no stages)
@@ -94,7 +94,7 @@ top_core          board pins -> core; inverts active-low CPU_RESETN into core.re
 
 - Only the PC, the registered instruction (inside `instruction_memory`), register-file writes, RAM writes and MMIO output registers are clocked (`posedge clk`); everything else is combinational. Reset is synchronous active-high and forces the next PC to 0, so the PC and the registered instruction restart at address 0 — registers and RAM are not reset. On FPGA configuration the PC starts at 0 and the registered instruction at word 0 (`initial` from the `.mem`), so the board runs without pressing reset.
 - Control encodings are enums in the packages (`opcode_pkg`, `func3_pkg`, `func7_pkg`, `alu_pkg` → `alu_op_t`, `branch_pkg` → `branch_op_t`, `mem_pkg` → `mem_width_t`/`mem_signed_t`). `control_unit` maps opcode/funct3/funct7 to these; unsupported opcodes get safe defaults (no reg/mem write, PC keeps advancing) with no trap.
-- MMIO lives inside `data_memory`: selected when `addr[31:28] == 4'h4`, register chosen by `addr[5:2]`. `core`/`data_memory` expose 4 generic 32-bit outputs `io_out0_o..io_out3_o` (write-only, reads return 0 so synthesis can trim unused bits) at `0x4000_0000 + 4k` and 4 generic 32-bit inputs `io_in0_i..io_in3_i` (R) at `0x4000_0010 + 4k`; `top_core` maps them to the board (out0 LEDs, out1 7-seg, out2 PMOD cols, in0 switches, in1 buttons, in2 PMOD rows; in3/out3 free). RAM occupies `0 .. MEM_DEPTH*4-1`.
+- MMIO lives inside `data_memory`: selected when `addr[31:28] == 4'h4`, register chosen by `addr[5:2]`. `core`/`data_memory` expose 4 generic 32-bit outputs `io_out0_o..io_out3_o` (write-only, reads return 0 so synthesis can trim unused bits) at `0x4000_0000 + 4k` and 4 generic 32-bit inputs `io_in0_i..io_in3_i` (R) at `0x4000_0010 + 4k`; `top_core` maps them to the board (out0 LEDs, out1 7-seg, out2 PMOD cols, in0 switches, in1 buttons, in2 PMOD rows; in3/out3 free). RAM occupies `0 .. DATA_MEM_DEPTH*4-1` = `0x000`–`0x3FF` (1 KiB).
 - **Branch convention:** branches are decided by a dedicated comparator in `execution` that compares `rs1` with `rs2` directly (not through the operand muxes or the ALU). The `alu_op_t` the `control_unit` emits for a branch only selects the comparison: `OP_CMP` = equality (BEQ/BNE), `OP_SLT` = signed less-than (BLT/BGE), `OP_SLTU` = unsigned (BLTU/BGEU); `OP_BCT` takes the branch when the comparison is true, `OP_BCF` when false. The ALU does not compute `OP_CMP` (returns 0) and has no flag output. Preserve this if you change the encodings.
 
 Naming: ports use `_i`/`_o` suffixes; signals are prefixed with the owning block (e.g. `execution_alu_control_o`).

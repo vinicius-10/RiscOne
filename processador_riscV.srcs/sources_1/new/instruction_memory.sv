@@ -65,6 +65,8 @@ module instruction_memory #(
     initial begin
         $readmemh(MEM_FILE, mem);
         // O PC nasce 0 (valor inicial dos FFs); a instrução nasce com a palavra 0.
+        // O xsim avisa (VRFC 10-2921) por instr_o ter initial e always_ff: é o
+        // mesmo padrão das saídas MMIO e vira o INIT dos FFs na síntese.
         instr_o = mem[0];
     end
 

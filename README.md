@@ -58,10 +58,10 @@ top_core (pinos da Nexys A7)
 
 ## Memórias e mapa MMIO
 
-- Profundidade padrão de ambas as memórias: **1024 palavras**.
+- Profundidades no `core`: memória de instruções com **1024 palavras** (4 KiB, `INSTR_MEM_DEPTH`) e RAM de dados com **256 palavras** (1 KiB, `DATA_MEM_DEPTH`). A RAM menor encurta o caminho do load; os programas atuais usam ~500 B, contando a pilha.
 - Memória de instruções: `program_bytes.mem`.
 - Memória de dados: `data.mem`.
-- RAM de dados ocupa endereços baixos até `MEM_DEPTH * 4 - 1` (padrão: `0x0000_0FFF`). A organização interna é por bytes agrupados em palavras.
+- RAM de dados ocupa endereços baixos até `DATA_MEM_DEPTH * 4 - 1` (`0x0000_03FF`); a pilha começa em `0x400`. A organização interna é por bytes agrupados em palavras.
 - Espaço MMIO é reconhecido quando `addr[31:28] == 4'h4` (base `0x4000_0000`); o offset do registrador vem de `addr[5:2]`.
 
 O core tem 4 saídas e 4 entradas genéricas de 32 bits (`io_out0_o` … `io_out3_o`, `io_in0_i` … `io_in3_i`); o `top_core` liga cada uma a um periférico da placa.
