@@ -20,7 +20,7 @@ O alvo é **RV32I puro, monociclo, Harvard, sem CSRs/traps**. Código que seria 
 | Faixa | O quê | Observação |
 | :-- | :-- | :-- |
 | IMEM `0x0000`–`0x0FFF` | instruções (`program_bytes.mem`) | **loads não leem a IMEM** |
-| DMEM `0x0000`–`0x0FFF` | `.rodata`, `.data`, `.bss`, pilha (`data.mem`) | pilha começa em `0x1000` e desce |
+| DMEM `0x0000`–`0x03FF` | `.rodata`, `.data`, `.bss`, pilha (`data.mem`) | **só 1 KiB**; pilha começa em `0x400` e desce |
 | `0x4000_0000` | `IO_OUT(0)` = `LEDS` `[15:0]` | E (lê 0) |
 | `0x4000_0004` | `IO_OUT(1)` = `SEG7`: `[7:0]` cátodos, `[15:8]` ânodos | E (lê 0) |
 | `0x4000_0008` | `IO_OUT(2)` = `PMOD_COL`: colunas `[3:0]` | E (lê 0) |
@@ -31,14 +31,14 @@ O alvo é **RV32I puro, monociclo, Harvard, sem CSRs/traps**. Código que seria 
 | `0x4000_001C` | `IO_IN(3)`: livre (lê 0) | L |
 
 - IMEM e DMEM começam ambas em 0 (Harvard). **Constantes, strings, tabelas de `switch` e de ponteiros de função precisam estar na DMEM** — o `sw/common/link.ld` já coloca `.rodata` lá. Em `.S`, nunca ponha dados em `.text` esperando lê-los com `lw`: declare-os em `.data` ou `.section .rodata`.
-- 4 KiB por memória (`MEM_DEPTH = 1024`). O `build_sw.ps1` falha se o código passar de 4 KiB ou se dados+bss deixarem menos de 256 B para a pilha.
+- IMEM com 4 KiB (`INSTR_MEM_DEPTH = 1024`) e DMEM com **1 KiB** (`DATA_MEM_DEPTH = 256`, reduzida em 04/11/2026 para fechar o timing). O `build_sw.ps1` falha se o código passar de 4 KiB ou se dados+bss deixarem menos de 256 B para a pilha, isto é, se passarem de 768 B. Pilha funda gasta a DMEM rápido: cada quadro tem 16–64 B, e o `fib(10)` recursivo do `selftest` usa ~400 B. Evite arrays grandes em variáveis locais.
 - Fora da RAM e fora do MMIO: leitura dá 0 e escrita é ignorada (sem erro).
 - Os 8 registradores MMIO têm 32 bits. As saídas são **somente escrita**: ler `0x4000_0000`–`0x0C` devolve 0, então guarde o valor numa variável se precisar alterá-lo depois (ex.: acender um LED sem apagar os outros). Escrita em entrada é ignorada. O significado de cada um na placa vem do `top_core`; bits sem pino na placa são descartados pela síntese.
 - Em C, use `sw/common/mmio.h` (`LEDS`, `SEG7`, `PMOD_COL`, `SWITCHES`, `BUTTONS`, `PMOD_ROW`, `BTN_*`, ou os genéricos `IO_OUT(n)`/`IO_IN(n)`). Acessos MMIO precisam de `volatile` (o header já faz). Programas compilados antes de 03/11/2026 usam o mapa antigo (chaves em `0x…04`): recompile.
 
 ## 3. Partida, retorno e reset
 
-- `sw/common/crt0.S` roda a partir do PC = 0: `sp = 0x1000`, zera `.bss`, chama `main`, deixa o retorno em `a0` e para em `_halt` (`j .` = `0x0000006F`).
+- `sw/common/crt0.S` roda a partir do PC = 0: `sp = 0x400` (`__stack_top`, fim da DMEM), zera `.bss`, chama `main`, deixa o retorno em `a0` e para em `_halt` (`j .` = `0x0000006F`).
 - Convenção de teste: `main` retorna **0 = sucesso**, outro valor = número do teste que falhou; por padrão também escrever nos LEDs `0xA5A5` (ok) ou `0xE000 | n` (falha), para ver na placa.
 - Programa para a placa que nunca termina: `main` com laço infinito (ver `sw/apps/leds`).
 - **O reset da placa zera só o PC.** `.data` não é recarregada (só vem do `data.mem` ao programar o FPGA); `.bss` é rezerada pelo crt0. Não dependa do valor inicial de globais após um reset — inicialize no `main` se precisar.
