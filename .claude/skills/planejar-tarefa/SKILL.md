@@ -23,8 +23,8 @@ Regras gerais:
 Liste tudo que não está definido pelo pedido nem pelo código. Para cada dúvida, traga 2–4 opções com a recomendada primeiro e o impacto de cada uma. Use a ferramenta de perguntas (até 4 por rodada; agrupe as relacionadas). Exemplos típicos neste projeto:
 
 - Comportamento em casos de borda (instrução inválida, endereço fora da faixa, overflow, reset no meio da operação).
-- Combinacional vs. registrado; em qual borda; o que o reset (que hoje só zera o PC) deve limpar.
-- Encodings novos nos packages (`alu_op_t`, `branch_op_t`, `mem_*`) — manter a convenção de branch por `alu_lsb_o`.
+- Combinacional vs. registrado; em qual borda; o que o reset (que hoje só reinicia o PC e a instrução registrada) deve limpar.
+- Encodings novos nos packages (`alu_op_t`, `branch_op_t`, `mem_*`) — manter a convenção dos branches (comparador dedicado na `execution`; `OP_CMP`/`OP_SLT`/`OP_SLTU` escolhem a comparação).
 - Custo em FPGA vs. simplicidade (ex.: multiplicador em DSP vs. iterativo).
 - Compatibilidade: o que pode quebrar em `tb_core`/`tb_program`/programas em `sw/apps`.
 

@@ -9,7 +9,7 @@
 // Project Name: processador_riscV
 // Target Devices: Artix-7 Nexys A7-100T
 // Tool Versions: vivado 2025.2
-// Description: Testbench de PC e busca usando uma memoria auxiliar que retorna NOP.
+// Description: Testbench de PC e busca com uma memória auxiliar que devolve uma palavra por endereço.
 // 
 // Dependencies: search, instruction_memory (modelo auxiliar), opcode_pkg
 // 
@@ -23,19 +23,22 @@
  * @file tb_instruction_fetch.sv
  * @brief Testbench da etapa de busca de instruções.
  *
- * Valida reset, avancos sequenciais de PC, carregamento de destino de desvio e
- * congelamento/retomada do PC pelo sinal `pc_write_i`. A memoria auxiliar
- * retorna sempre a instrucao NOP; este testbench verifica o PC e PC+4, nao o
- * conteudo da instrucao.
+ * Valida reset (no início e no meio da execução), avanços sequenciais de PC,
+ * carregamento de destino de desvio e congelamento/retomada do PC pelo sinal
+ * `pc_write_i`. A memória auxiliar é combinacional como a real e devolve
+ * `~endereço`, uma palavra diferente para cada endereço. O search a lê com o
+ * próximo PC e registra a palavra junto com o PC; assim, além do PC e de PC+4,
+ * o testbench confere que a instrução registrada é sempre a do PC atual
+ * (`instr_o == ~pc_o`).
  *
- * @param clk Clock usado para atualizar o PC.
+ * @param clk Clock usado para atualizar o PC e registrar a instrução.
  * @param reset_i Reset do PC, ativo em nivel alto.
  * @param pc_write_i Habilita a atualizacao do PC; em 0, mantem o valor atual.
  * @param pc_branch_i Seleciona o carregamento de `new_pc_i` quando habilitado.
  * @param new_pc_i Endereco de destino aplicado ao caminho de desvio.
  * @retval pc_o Valor atual do contador de programa.
  * @retval pc_next Proximo endereco sequencial, PC+4.
- * @retval instr_o Instrucao retornada pelo modelo auxiliar, sempre NOP.
+ * @retval instr_o Instrução registrada pelo search; deve valer `~pc_o`.
  *
  */
 
@@ -101,13 +104,16 @@ module tb_instruction_fetch;
             test_count++;
             #1; // Pequeno delay após o clock para estabilização dos sinais
             
-            if ((pc_o === expected_pc_o) && (pc_next === expected_pc_next)) begin
-                $display("[PASS] Teste %0d: %-32s | PC: 0x%08h | PC_NEXT: 0x%08h", 
-                         test_count, test_name, pc_o, pc_next);
+            // A instrução entregue tem que ser a do PC atual (palavra ~PC no modelo).
+            if ((pc_o === expected_pc_o) && (pc_next === expected_pc_next) &&
+                (instr_o === ~expected_pc_o)) begin
+                $display("[PASS] Teste %0d: %-32s | PC: 0x%08h | PC_NEXT: 0x%08h | INSTR: 0x%08h",
+                         test_count, test_name, pc_o, pc_next, instr_o);
                 pass_count++;
             end else begin
-                $display("[FAIL] Teste %0d: %-32s | PC Obtido: 0x%08h (Esp: 0x%08h) | PC_NEXT Obtido: 0x%08h (Esp: 0x%08h)", 
-                         test_count, test_name, pc_o, expected_pc_o, pc_next, expected_pc_next);
+                $display("[FAIL] Teste %0d: %-32s | PC Obtido: 0x%08h (Esp: 0x%08h) | PC_NEXT Obtido: 0x%08h (Esp: 0x%08h) | INSTR Obtida: 0x%08h (Esp: 0x%08h)",
+                         test_count, test_name, pc_o, expected_pc_o, pc_next, expected_pc_next,
+                         instr_o, ~expected_pc_o);
                 fail_count++;
             end
         end
@@ -179,7 +185,20 @@ module tb_instruction_fetch;
 
         @(negedge clk);
         check_result("Retomada Pos-Stall", 32'h0000_0110, 32'h0000_0114);
-        
+
+        // --- TESTE 7: Reset no meio da execução ---
+        // O reset entra no próximo PC: na borda, PC = 0 e a instrução registrada é a palavra 0.
+        @(negedge clk);
+        reset_i = 1'b1;
+        check_result("Reset pedido (antes da borda)", 32'h0000_0114, 32'h0000_0118);
+
+        @(negedge clk);
+        reset_i = 1'b0;
+        check_result("Reset no meio da execucao", 32'h0000_0000, 32'h0000_0004);
+
+        @(negedge clk);
+        check_result("Retomada apos o reset", 32'h0000_0004, 32'h0000_0008);
+
         
 
         // =========================================================================
@@ -206,15 +225,17 @@ module tb_instruction_fetch;
 endmodule
 
 /**
- * @brief Modelo auxiliar de memoria usado exclusivamente por tb_instruction_fetch.
+ * @brief Modelo auxiliar de memória usado exclusivamente por tb_instruction_fetch.
  *
- * Substitui a memoria real durante este teste e fornece uma instrucao NOP
- * constante. O parametro MEM_DEPTH e mantido para compatibilidade com a
- * instancia da etapa de busca.
+ * Substitui a memória real durante este teste. Como a real, é combinacional. A
+ * palavra de cada endereço é `~addr_i`, diferente para cada endereço, para o
+ * testbench conferir que a instrução registrada pelo search é a do PC atual.
+ * O parâmetro MEM_DEPTH é mantido para compatibilidade com a instância da
+ * etapa de busca.
  *
- * @param MEM_DEPTH Profundidade nominal da memoria no modulo search.
- * @param addr_i Endereco recebido do PC; nao afeta o valor retornado.
- * @retval instr_o Instrucao NOP constante (addi x0, x0, 0).
+ * @param MEM_DEPTH Profundidade nominal da memória no módulo search.
+ * @param addr_i Endereço da próxima instrução, vindo do search.
+ * @retval instr_o Palavra do endereço: `~addr_i`.
  */
 module instruction_memory #(
     parameter int MEM_DEPTH = 1024
@@ -222,6 +243,5 @@ module instruction_memory #(
     input  logic [31:0] addr_i,
     output logic [31:0] instr_o
 );
-    // Retorna NOP (addi x0, x0, 0)
-    assign instr_o = 32'h0000_0013;
+    assign instr_o = ~addr_i;
 endmodule

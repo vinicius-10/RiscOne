@@ -9,8 +9,9 @@
  * nao para junto do codigo. Como as duas regioes se sobrepoem em endereco,
  * o link usa --no-check-sections (ver scripts/build_sw.ps1).
  *
- * Tamanhos: MEM_DEPTH = 1024 palavras => 4 KiB em cada memoria. Se mudar
- * MEM_DEPTH no core, ajuste LENGTH abaixo.
+ * Tamanhos: IMEM 4 KiB (INSTR_MEM_DEPTH = 1024 palavras) e DMEM 1 KiB
+ * (DATA_MEM_DEPTH = 256 palavras). Se mudar os parametros no core, ajuste
+ * LENGTH abaixo e os tamanhos no scripts/build_sw.ps1.
  */
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
@@ -18,7 +19,7 @@ ENTRY(_start)
 MEMORY
 {
     IMEM (rx)  : ORIGIN = 0x00000000, LENGTH = 4K
-    DMEM (rw)  : ORIGIN = 0x00000000, LENGTH = 4K
+    DMEM (rw)  : ORIGIN = 0x00000000, LENGTH = 1K
 }
 
 SECTIONS

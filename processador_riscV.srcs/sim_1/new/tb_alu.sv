@@ -23,16 +23,16 @@
  * @file tb_alu.sv
  * @brief Testbench direcionado e aleatorio da unidade ALU.
  *
- * Aplica casos direcionados e 1000 vetores aleatorios. Os casos aleatorios sao
- * comparados com a funcao de referencia `ref_alu`; os casos manuais verificam
- * resultados e a saida `alu_lsb_o`. O resumo final informa quantidade de testes e
- * falhas.
+ * Aplica casos direcionados e 1000 vetores aleatórios. Os casos aleatórios são
+ * comparados com a função de referência `ref_alu`; os casos manuais trazem o
+ * resultado esperado escrito à mão. `OP_CMP` não é calculado pela ALU (a
+ * igualdade dos desvios fica no comparador da `execution`), então o esperado é
+ * 0. O resumo final informa quantidade de testes e falhas.
  *
  * @param a_i Primeiro operando aplicado ao DUT.
  * @param b_i Segundo operando aplicado ao DUT.
  * @param alu_op_i Codigo da operacao exercitada.
  * @retval alu_o Resultado observado da operacao.
- * @retval alu_lsb_o Bit de condicao observado na saida da ALU.
  */
 module tb_alu;
     import alu_pkg::*;
@@ -43,7 +43,6 @@ module tb_alu;
     logic [XLEN-1:0] b_i;
     alu_op_t         alu_op_i;
     logic [XLEN-1:0] alu_o;
-    logic            alu_lsb_o;
 
     // Estatísticas do Teste
     int total_tests = 0;
@@ -56,8 +55,7 @@ module tb_alu;
         .a_i(a_i),
         .b_i(b_i),
         .alu_op_i(alu_op_i),
-        .alu_o(alu_o),
-        .alu_lsb_o(alu_lsb_o)
+        .alu_o(alu_o)
     );
     
 
@@ -81,9 +79,8 @@ module tb_alu;
             OP_SRA:    return $signed(a) >>> b[4:0];
             OP_SLT:    return {{(XLEN-1){1'b0}}, $signed(a) < $signed(b)};
             OP_SLTU:   return {{(XLEN-1){1'b0}}, a < b};
-            OP_CMP:    return {{(XLEN-1){1'b0}}, a == b};
             OP_PASS_B: return b;
-            default:   return '0;
+            default:   return '0;   // inclui OP_CMP, que a ALU não calcula
         endcase
     endfunction
 
@@ -97,23 +94,20 @@ module tb_alu;
         input logic [XLEN-1:0] exp_alu, // Resultado esperado inserido MANUALMENTE
         input string           test_name = ""
     );
-        logic exp_lsb;
-
         a_i      = a;
         b_i      = b;
         alu_op_i = op;
 
         #10; // Aguarda a propagação combinacional
 
-        exp_lsb = exp_alu[0]; // A flag alu_lsb_o reflete o bit [0] do resultado manual
         total_tests++;
 
-        if (alu_o !== exp_alu || alu_lsb_o !== exp_lsb) begin
+        if (alu_o !== exp_alu) begin
             error_count++;
             $display("[ERRO MANU #%0d] Falha: %s", error_count, test_name);
             $display("   OP: %s | A: 0x%8h | B: 0x%8h", op.name(), a, b);
-            $display("   Obtido:   alu_o = 0x%8h | alu_lsb_o = %0b", alu_o, alu_lsb_o);
-            $display("   Esperado: alu_o = 0x%8h | alu_lsb_o = %0b\n", exp_alu, exp_lsb);
+            $display("   Obtido:   alu_o = 0x%8h", alu_o);
+            $display("   Esperado: alu_o = 0x%8h\n", exp_alu);
         end
     endtask
 
@@ -150,8 +144,8 @@ module tb_alu;
         // Zeros e Comparações de Igualdade
         check_manual(32'h0000_0000, 32'h0000_0000, OP_ADD, 32'h0000_0000, "Soma de Zeros");
         check_manual(32'h0000_0000, 32'h0000_0000, OP_SUB, 32'h0000_0000, "Subtração de Zeros");
-        check_manual(32'h1234_5678, 32'h1234_5678, OP_CMP, 32'h0000_0001, "Igualdade (Retorna 1)");
-        check_manual(32'h1234_5678, 32'h8765_4321, OP_CMP, 32'h0000_0000, "Desigualdade (Retorna 0)");
+        // A igualdade dos desvios é do comparador da execution; a ALU devolve 0.
+        check_manual(32'h1234_5678, 32'h1234_5678, OP_CMP, 32'h0000_0000, "OP_CMP: a ALU nao calcula (0)");
 
         // Aritmética, Overflow e Underflow
         check_manual(32'h7FFF_FFFF, 32'h0000_0001, OP_ADD, 32'h8000_0000, "Overflow Int Positivo");

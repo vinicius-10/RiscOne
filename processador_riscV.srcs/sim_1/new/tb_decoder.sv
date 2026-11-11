@@ -343,7 +343,7 @@ module tb_decoder;
         // SEÇÃO 8: VALIDAÇÃO DE PROTEÇÃO DO REGISTRADOR ZERO (x0)
         // ---------------------------------------------------------------------
 
-        @(negedge clk); // TESTE 20: Escrita bloqueda em x0 (ADDI x0, x0, 500)
+        @(negedge clk); // TESTE 20: Escrita bloqueada em x0 (ADDI x0, x0, 500)
         instruction_i  = {12'b0001_1111_0100, 5'b00000, F3_ADDI, 5'b00000, OPCODE_OP_IMM};
         written_data_i = 32'd500;
         @(posedge clk);

@@ -40,6 +40,8 @@
  * @param mem_width_i Largura do acesso exercitado.
  * @param mem_signed_i Modo de extensao aplicado nas leituras.
  * @param addr_i Endereco de byte aplicado ao DUT.
+ * @param addr_io_i, addr_page0_i Flags de regiao, geradas aqui a partir de
+ *                                addr_i (no core vem da execution).
  * @param data_i Dado usado nos casos de escrita.
  * @param io_in0_i..io_in3_i Entradas genericas de E/S aplicadas ao DUT.
  * @retval data_o Valor lido pela memoria.
@@ -77,6 +79,14 @@ module tb_data_memory;
 
     localparam logic [31:0] IO_BASE = 32'h4000_0000;
 
+    // Flags de regiao: no core vem da execution; aqui sao a decodificacao de
+    // referencia, calculada a partir do endereco aplicado.
+    logic            addr_io_i;
+    logic            addr_page0_i;
+
+    assign addr_io_i    = (addr_i[31:28] == 4'h4);
+    assign addr_page0_i = (addr_i[31:12] == 20'h0);
+
     // Contador de falhas
     integer fail_count = 0;
 
@@ -92,6 +102,8 @@ module tb_data_memory;
         .mem_width_i  (mem_width_i),
         .mem_signed_i (mem_signed_i),
         .addr_i       (addr_i),
+        .addr_io_i    (addr_io_i),
+        .addr_page0_i (addr_page0_i),
         .data_i       (data_i),
         .data_o       (data_o),
         .io_in0_i     (io_in0_i),
