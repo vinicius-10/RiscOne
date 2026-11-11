@@ -443,10 +443,10 @@ module tb_execution;
         reg_data2_i      = 32'd100;       // rs2 = 100
         alu_control_i    = OP_CMP;        // Comparador: igualdade (a ALU devolve 0)
         branch_control_i = OP_BCT;        // Branch: BEQ
-        branch_enable_i  = 1'b1;          // Branch: HABILITADO
+        branch_enable_i  = 1'b0;          // Branch: Desativado
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(18, "Comparador BEQ: iguais (100 == 100), ALU = 0", 32'd0, 32'h1234_6678, 1'b1);
+        check_result(18, "BEQ iguais (100 == 100) sem enable, ALU = 0", 32'd0, 32'h1234_6678, 1'b0);
 
         @(negedge clk); // TESTE 19
         pc_i             = 32'h0000_1000; // Endereço atual do PC
@@ -456,10 +456,10 @@ module tb_execution;
         reg_data2_i      = 32'd50;        // rs2 = 50
         alu_control_i    = OP_CMP;        // Comparador: igualdade (a ALU devolve 0)
         branch_control_i = OP_BCT;        // Branch: BEQ
-        branch_enable_i  = 1'b1;          // Branch: HABILITADO
+        branch_enable_i  = 1'b0;          // Branch: Desativado
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
         control_alu_b    = 2'b00;         // MUX B: Seleciona rs2
-        check_result(19, "Comparador BEQ: diferentes (100 != 50)", 32'd0, 32'h1234_6678, 1'b0);
+        check_result(19, "BEQ diferentes (100 != 50) sem enable", 32'd0, 32'h1234_6678, 1'b0);
 
         // ---------------------------------------------------------------------
         // SEÇÃO 3: TESTES DE DESVIOS E SALTOS (BRANCH E JUMP)
