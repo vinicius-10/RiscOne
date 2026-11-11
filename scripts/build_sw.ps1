@@ -29,8 +29,10 @@ $Root   = Split-Path -Parent $PSScriptRoot
 $Common = Join-Path $Root 'sw\common'
 $Apps   = Join-Path $Root 'sw\apps'
 $MemDir = Join-Path $Root 'processador_riscV.srcs\sources_1\imports\new'
-# Tamanho de cada memoria (MEM_DEPTH = 1024 palavras). Manter igual ao link.ld.
-$MemBytes = 4096
+# Tamanho das memorias (INSTR_MEM_DEPTH = 1024 e DATA_MEM_DEPTH = 256 palavras no
+# core). Manter igual ao link.ld.
+$ImemBytes = 4096
+$DmemBytes = 1024
 $StackMargin = 256
 
 if ($List -or -not $App) {
@@ -106,9 +108,9 @@ foreach ($l in (& $nm $elf)) {
     if ($l -match '^([0-9a-f]+) \S __bss_end$') { $bssEnd = [Convert]::ToUInt32($Matches[1], 16) }
 }
 
-if ($text.Length -gt $MemBytes) { Write-Error "codigo ($($text.Length) B) nao cabe na IMEM ($MemBytes B)" }
-if ($bssEnd -gt $MemBytes - $StackMargin) {
-    Write-Error "dados+bss ate 0x$('{0:X}' -f $bssEnd) deixam menos de $StackMargin B para a pilha (DMEM = $MemBytes B)"
+if ($text.Length -gt $ImemBytes) { Write-Error "codigo ($($text.Length) B) nao cabe na IMEM ($ImemBytes B)" }
+if ($bssEnd -gt $DmemBytes - $StackMargin) {
+    Write-Error "dados+bss ate 0x$('{0:X}' -f $bssEnd) deixam menos de $StackMargin B para a pilha (DMEM = $DmemBytes B)"
 }
 
 # ---- program_bytes.mem: uma palavra por linha ------------------------------------
@@ -138,7 +140,7 @@ $enc = New-Object System.Text.ASCIIEncoding
 Remove-Item $textBin, $dataBin -ErrorAction SilentlyContinue
 
 Write-Host ("{0}: codigo {1} B / {2} B, dados {3} B, dados+bss ate 0x{4:X} (pilha a partir de 0x{5:X})" -f `
-    $App, $text.Length, $MemBytes, $data.Length, $bssEnd, $MemBytes)
+    $App, $text.Length, $ImemBytes, $data.Length, $bssEnd, $DmemBytes)
 Write-Host "saida: $Out"
 
 if ($Install) {

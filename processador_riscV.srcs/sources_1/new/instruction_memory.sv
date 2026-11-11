@@ -31,11 +31,15 @@
  * com diferenca apenas nos bits [1:0] selecionam a mesma palavra. A leitura nao
  * depende de clock.
  *
+ * O `search` endereça esta memória com o próximo PC e guarda a palavra lida no
+ * registrador da instrução, na mesma borda em que atualiza o PC.
+ *
  * @param XLEN Largura, em bits, de cada palavra e da interface. Padrao: 32.
  * @param MEM_DEPTH Quantidade de palavras na memoria. Padrao: 1024.
  * @param MEM_FILE Caminho do arquivo hexadecimal de inicializacao. Padrao:
  *                 `program_bytes.mem`.
- * @param addr_i Endereco de byte da instrucao atual, normalmente vindo do PC.
+ * @param addr_i Endereço de byte da próxima instrução (próximo PC, vindo do
+ *               `search`).
  * @retval instr_o Palavra de XLEN bits lida do indice selecionado por addr_i.
  */
 module instruction_memory #(

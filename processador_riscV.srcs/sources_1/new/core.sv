@@ -18,8 +18,9 @@
 // Revision:
 // Revision 0.02 - Integracao dos modulos do processador
 // Additional Comments:
-//   O sinal reset_i e encaminhado ao modulo search, que zera o PC de forma
-//   sincrona. As memorias sao inicializadas pelos arquivos configurados nos
+//   O sinal reset_i é encaminhado ao módulo search, que zera o PC de forma
+//   síncrona e faz a instrução registrada voltar à palavra 0. As memorias
+//   sao inicializadas pelos arquivos configurados nos
 //   parametros INSTR_MEM_FILE e DATA_MEM_FILE.
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -39,18 +40,22 @@
  * saidas genericas de E/S (MMIO) de 32 bits; o significado de cada uma na
  * placa e definido no top_core. Os sinais de PC, instrucao e resultados
  * permanecem internos ao modulo. O banco de
- * registradores nao possui reset; `reset_i` reinicia somente o PC por meio do
- * modulo `search`.
+ * registradores não possui reset; `reset_i` reinicia somente o PC (e a
+ * instrução registrada, que volta à palavra 0) por meio do módulo `search`.
  *
  * @param XLEN Largura dos dados e enderecos. Padrao: 32 bits.
- * @param MEM_DEPTH Numero de palavras na memoria de instrucoes e na memoria de
- *                  dados. Padrao: 1024.
+ * @param INSTR_MEM_DEPTH Número de palavras da memória de instruções. Padrão:
+ *                        1024 (4 KiB).
+ * @param DATA_MEM_DEPTH Número de palavras da RAM de dados. Padrão: 256 (1 KiB,
+ *                       endereços 0x000..0x3FF). Menor que a memória de
+ *                       instruções para encurtar o caminho do load.
  * @param INSTR_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
  *                       instrucoes. Padrao: `program_bytes.mem`.
  * @param DATA_MEM_FILE Arquivo hexadecimal de inicializacao da memoria de
  *                      dados. Padrao: `data.mem`.
- * @param clk Clock do processador; PC, escritas no banco de registradores e
- *            escritas na memoria de dados sao atualizados na borda de subida.
+ * @param clk Clock do processador; PC, instrução registrada, escritas no banco
+ *            de registradores e escritas na memória de dados são atualizados
+ *            na borda de subida.
  * @param reset_i Reset sincrono ativo em nivel alto para zerar o PC.
  * @param io_in0_i..io_in3_i Entradas genericas, lidas em 0x4000_0010 + 4k.
  * @retval io_out0_o..io_out3_o Saidas genericas, somente escrita, em
@@ -58,7 +63,8 @@
  */
 module core #(
     parameter int XLEN = 32,
-    parameter int MEM_DEPTH = 1024,
+    parameter int INSTR_MEM_DEPTH = 1024,
+    parameter int DATA_MEM_DEPTH = 256,
     parameter string INSTR_MEM_FILE = "program_bytes.mem",
     parameter string DATA_MEM_FILE = "data.mem"
 )(
@@ -89,6 +95,8 @@ module core #(
     logic [XLEN-1:0] data_memory_data;
     logic [XLEN-1:0] alu_result;
     logic [XLEN-1:0] data_memory_addr;
+    logic            data_memory_addr_io;     // endereco no MMIO (sem esperar o somador)
+    logic            data_memory_addr_page0;  // endereco nos primeiros 4 KiB (idem)
     logic [XLEN-1:0] write_back_data;
     logic            pc_write_enable;
     logic            branch_taken;
@@ -105,7 +113,7 @@ module core #(
 
     search #(
         .XLEN(XLEN),
-        .MEM_DEPTH(MEM_DEPTH),
+        .MEM_DEPTH(INSTR_MEM_DEPTH),
         .MEM_FILE(INSTR_MEM_FILE)
     ) search_inst (
         .clk         (clk),
@@ -152,12 +160,14 @@ module core #(
         .pc_branch_o     (pc_branch),
         .alu_result_o    (alu_result),
         .branch_taken_o  (branch_taken),
-        .mem_addr_o      (data_memory_addr)
+        .mem_addr_o      (data_memory_addr),
+        .mem_io_o        (data_memory_addr_io),
+        .mem_page0_o     (data_memory_addr_page0)
     );
 
     data_memory #(
         .XLEN(XLEN),
-        .MEM_DEPTH(MEM_DEPTH),
+        .MEM_DEPTH(DATA_MEM_DEPTH),
         .MEM_FILE(DATA_MEM_FILE)
     ) data_memory_inst (
         .clk         (clk),
@@ -165,6 +175,8 @@ module core #(
         .mem_width_i (data_memory_width),
         .mem_signed_i(data_memory_signed),
         .addr_i      (data_memory_addr),
+        .addr_io_i   (data_memory_addr_io),
+        .addr_page0_i(data_memory_addr_page0),
         .data_i      (rs2_data),
         .data_o      (data_memory_data),
         .io_in0_i    (io_in0_i),
