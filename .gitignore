@@ -39,3 +39,6 @@ desktop.ini
 
 # Saida do scripts/run_tb.ps1
 build/
+
+# Livros e artigos de referencia do TCC (direitos autorais, nao publicar)
+tcc/artigos/
