@@ -18,7 +18,8 @@
     Le as fontes de sources_1/new e o XDC de constrs_1 diretamente (non-project mode).
     Saida em build/synth/<Tag>/ (ignorado pelo git):
       resumo.txt, timing.rpt (timing summary com 10 piores caminhos), paths.rpt (20 caminhos em
-      tabela), util.rpt, util_hier.rpt (area por modulo), vivado.log
+      tabela), util.rpt, util_hier.rpt (area por modulo), vivado.log,
+      familias.txt / familias_det.txt (pior folga por familia de caminho, de scripts/familias.tcl)
     Cada execucao acrescenta uma linha em build/synth/historico.csv.
     Codigo de saida: 0 se o timing fecha (WNS >= 0), 1 se viola, 2 se o Vivado falhou.
 #>
@@ -63,6 +64,7 @@ $Mods = 'alu', 'control_unit', 'imm_gen', 'register_file', 'decoder', 'execution
         'instruction_memory', 'search', 'data_memory', 'write_back', 'core', 'top_core'
 $Srcs = @($Pkgs + $Mods | ForEach-Object { (Join-Path $Rtl "$_.sv") -replace '\\', '/' })
 
+$FamTcl = (Join-Path $PSScriptRoot 'familias.tcl') -replace '\\', '/'
 $Out = Join-Path $Base $Tag
 $sw = [Diagnostics.Stopwatch]::StartNew()
 if ($ParseOnly) {
@@ -112,6 +114,7 @@ report_timing -max_paths 20 -nworst 1 -path_type summary -file paths.rpt
 report_utilization -file util.rpt
 report_utilization -hierarchical -hierarchical_depth 4 -file util_hier.rpt
 report_methodology -file methodology.rpt
+source {$FamTcl}
 "@
 Set-Content -Path (Join-Path $Out 'run.tcl') -Value $tcl -Encoding ascii
 
@@ -220,8 +223,14 @@ foreach ($pp in $paths | Select-Object -First 5) {
 }
 foreach ($l in $latches | Select-Object -First 5) { $r.Add("LATCH: $l") }
 foreach ($l in $critWarn | Select-Object -First 5) { $r.Add("$l") }
+$famFile = Join-Path $Out 'familias.txt'
+if (Test-Path $famFile) {
+    $r.Add('')
+    $r.Add('Pior folga por familia (ns; detalhe em familias_det.txt):')
+    foreach ($l in Get-Content $famFile) { $r.Add("   $l") }
+}
 $r.Add('')
-$r.Add('Area por modulo: util_hier.rpt | caminhos: timing.rpt, paths.rpt | log: vivado.log')
+$r.Add('Area por modulo: util_hier.rpt | caminhos: timing.rpt, paths.rpt, familias_det.txt | log: vivado.log')
 
 [IO.File]::WriteAllLines((Join-Path $Out 'resumo.txt'), $r, (New-Object System.Text.UTF8Encoding $false))
 $r | ForEach-Object { Write-Host $_ }
