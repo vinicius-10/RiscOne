@@ -52,10 +52,68 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | E4 (experimento) | placa | `(* max_fanout = 48 *)` no próximo PC (`pc_sel`, fanout 181 na ROM) | -0,160 | 98,4 | 1270 | 172 | 99 | 0 | ruído no padrão e **pior** no máximo (−0,178). Revertido |
 | 2026-11-04 | E3 (experimento) | placa | decisão de desvio mais rasa: um comparador "menor" (com sinal = sem sinal com o bit 31 invertido) e a decisão separada em "o que fazer se verdadeiro / se falso" | -0,234 | 97,7 | 1250 | 172 | 98 | 0 | igual no padrão e **pior** no máximo (−0,242); −16 LUTs. Revertido |
 | 2026-11-04 | P1 (protótipo) | placa | duas ROMs: lê PC+4 e o destino em paralelo e a decisão do desvio só escolhe a palavra | -0,390 | 96,2 | 1517 | 172 | 98 | 0 | o próximo PC sai do topo, mas a escrita do RF (AUIPC/JAL, load) piora com o design maior; máximo +0,032 (ruído). Não mantido |
+| 2026-11-21 | base_familias / _max | placa | RTL de `ir_search` com o relatório por família (`scripts/familias.tcl`) | -0,228 / +0,008 | 97,8 / 100,1 | 1266 / 1272 | 172 | 98 | 0 | repete `ir_search` exatamente; famílias na seção "Rodada de 21/11" |
+| 2026-11-21 | A, ac, ad, acd, ac2, ac2r, ac2m, ac2w, ac2s (protótipos) | placa | cópias fora do repositório (plano `docs/planos/2026-11-21-margem-100mhz.md`) | ver seção "Rodada de 21/11" | | | | | | melhor: ac2 (+0,091 / +0,141, 1159 LUTs) |
+| 2026-11-21 | x0_fisico / _max | placa | `register_file`: x0 no array (nasce 0, nunca escrito), leitura sem o mux de zero | -0,213 / +0,053 | 97,9 / 100,5 | 1162 / 1189 | 172 | 98 | 0 | **mantido**: −104 LUTs; no máximo todas as famílias iguais ou melhores. No padrão a família "RF sem RAM" cai 0,47 ns (caminho 82% rota) |
+| 2026-11-21 | cmp_funct3 / _max | placa | `execution`: comparador de desvio em cadeia única com o modo pelo `funct3` (porta `funct3_i`), decisão "toma se verdadeiro / se falso" e base do alvo sem `enable` | -0,256 / +0,050 | 97,5 / 100,5 | 1161 / 1163 | 172 | 98 | 0 | próximo PC melhora nos dois fluxos (+0,042 / +0,148); o pior passa a ser a flag de região → load → RF (−0,256 no padrão). Pior que o protótipo ac2, que só difere numa linha do `control_unit` (ver seção) |
+| 2026-11-21 | cmp_funct3_jalr / _max | placa | o mesmo + `control_unit`: JALR emite `OP_BIR` sem olhar o `funct3` (o enable continua estrito) — **estado atual** | **+0,091 / +0,141** | 100,9 / 101,4 | 1159 / 1176 | 172 | 98 | 0 | **mantido** (decisão do usuário): **fecha 100 MHz nos dois fluxos**, idêntico ao protótipo ac2. A linha só muda o netlist o bastante para outro placement (a estrutura é a mesma de `cmp_funct3`) |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Rodada de 21/11/2026 (plano `docs/planos/2026-11-21-margem-100mhz.md`)
+
+Ponto de partida: `ir_search` (−0,228 / +0,008), com as famílias empatadas a ~0,1 ns. Método novo: `scripts/familias.tcl`, chamado pelo `synth.ps1`, mede a pior folga de cada família (`familias.txt` e a tabela no `resumo.txt`). Os candidatos foram ranqueados em protótipos fora do repositório; só os que ganharam nos dois fluxos entraram no projeto.
+
+### Protótipos (WNS padrão / máximo, em ns; mudanças cumulativas)
+
+| Tag | Mudança | WNS | LUTs | Conclusão |
+| :-- | :-- | --: | --: | :-- |
+| A | x0 no array do banco, sem o mux de zero na leitura | −0,213 / +0,053 | 1162 | entra: −104 LUTs, uma LUT a menos em todo caminho que lê o banco, fanout dos campos `rs1`/`rs2` de 69 para 34 |
+| ac | A + comparador em cadeia única com o modo vindo do `alu_control` | −0,547 / — | 1172 | pior: a decodificação do `alu_control` (3 LUTs + MUXF7) ficou em série com a cadeia |
+| ad | A + decodificação rasa (seletores A/B, imediato, `alu_control`) | −0,371 / — | 1223 | pior; +61 LUTs |
+| acd | ac + ad | −0,481 / +0,018 | 1203 | pior |
+| **ac2** | A + comparador em cadeia única com o modo pelo `funct3` + base do alvo sem `enable` (+ JALR com `OP_BIR` sem `funct3`) | **+0,091 / +0,141** | 1159 | **entra**: o próximo PC sai do topo |
+| ac2r | ac2 + reset nos pinos S/R dos FFs, fora do mux do próximo PC | +0,016 / +0,163 | 1166 | ruído (o próximo PC já tem folga) |
+| ac2m | ac2 + imediato dedicado ao endereço de load/store | −0,162 / +0,110 | 1128 | o imediato sai do caminho do load, mas o WNS não melhora; só o store ganha (+0,8 ns) |
+| ac2w | ac2 + leitura da `data_memory` reorganizada (faixa/sinal direto na palavra da RAM, RAM × MMIO por último) | +0,008 / +0,092 | 1158 | sem ganho: o Vivado funde o mux final da ALU na LUT do write-back e a escolha RAM × MMIO continua numa LUT separada (4 LUTs depois da RAM) |
+| ac2s | ac2 + `shamt` dedicado + seletores A/B rasos | −0,127 / +0,047 | 1187 | melhora o deslocamento no máximo, mas o load piora |
+
+O comparador novo foi conferido contra um modelo de referência em 3,6 milhões de casos, e o `tb_execution` ganhou os testes 59 (4000 vetores aleatórios) e 60 (pares de bordas × 6 desvios).
+
+### Folga por família (padrão / máximo)
+
+| Família | base (`ir_search`) | x0_fisico | cmp_funct3_jalr |
+| :-- | --: | --: | --: |
+| próximo PC | −0,228 / +0,008 | −0,150 / +0,053 | +0,201 / +0,278 |
+| escrita no RF via RAM de dados (load) | +0,175 / +0,026 | +0,192 / +0,327 | +0,184 / +0,141 |
+| escrita no RF sem a RAM (ALU, deslocamento, flag de região) | +0,257 / +0,039 | −0,213 / +0,092 | +0,091 / +0,206 |
+| store | +0,656 / +0,448 | +0,555 / +0,840 | +0,258 / +0,708 |
+| saídas MMIO | +1,980 / +1,666 | +2,505 / +2,297 | +1,298 / +1,772 |
+
+- **Esforço máximo:** todas as famílias melhoram.
+- **Fluxo padrão:** store e MMIO perdem folga, mas continuam longe do pior.
+
+### Por que funcionou
+
+- **x0 físico:** o mux `rs == 0 ? 0 : RAM` era uma LUT6 por bit (dado + 5 bits do endereço) logo depois da LUTRAM, no começo do load, da ALU, do JALR e da flag de região. Também pendurava 32 cargas em cada bit dos campos `rs1`/`rs2` da instrução. Sozinho não move o WNS do padrão (lá a família "RF sem RAM", 82% rota, piorou 0,47 ns), mas libera as famílias para o comparador render.
+- **Comparador:** antes eram 3 comparações em paralelo, escolhidas depois pelo `alu_control`, e depois a decisão: 3 LUTs entre a cadeia e a ROM. Agora:
+  - uma cadeia só, configurada pelo `funct3`, que é fio da instrução: dígitos de 2 bits, carry de `lt + (lt ^ eq) + cin`; com sinal = bit 31 invertido;
+  - a decisão pré-calculada (o que fazer com a comparação verdadeira e com a falsa).
+
+  Sobra 1 LUT até o mux do próximo PC.
+- **Lição:** configurar a cadeia pelo `alu_control` (protótipo ac) piorou, porque um seletor decodificado na frente de uma cadeia de carry entra em série com ela.
+- **Linha do JALR:** sem ela (`cmp_funct3`), o mesmo RTL estrutural deu −0,256 / +0,050. A diferença é de placement: a linha muda o netlist em ~2 LUTs. O resultado com a linha é determinístico no script; o run da GUI pode variar.
+
+### O que limita agora (+0,09 / +0,14 ns)
+
+- **Flag de região → load → RF** (padrão): rs1 → carry de 12 bits → flag MMIO/página → escolha RAM × MMIO → faixa/sinal → write-back, 77% rota.
+- **Load** (máximo): rs1 → somador → RAM de dados (fanout 138) → 4 LUTs → RF.
+- **Próximas alavancas** (não medidas nesta rodada):
+  - seletor de write-back de 2 bits codificado no controle, para a escolha RAM × MMIO e o mux da ALU caberem na última LUT;
+  - AUIPC pelo somador do alvo e `PC+4` direto no write-back. Isso tira o mux A da ALU e a 3ª entrada do B;
+  - duplicar o somador do endereço para dividir o fanout de 138.
 
 ## Diagnóstico após `ir_search` (04/11/2026)
 
