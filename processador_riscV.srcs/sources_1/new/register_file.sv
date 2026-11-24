@@ -9,15 +9,16 @@
 // Project Name: processador_riscV
 // Target Device: Artix-7 Nexys A7-100T
 // Tool Version: Vivado 2025.2
-// Description: Banco com 31 registradores inteiros e duas portas de leitura.
+// Description: Banco com 32 registradores inteiros e duas portas de leitura.
 //
 // Dependencies:
 //
 // Revision:
 // Revision 0.01 - File Created
+// Revision 0.02 - x0 ocupa uma posicao do array (nasce 0 e nunca e escrito)
 // Additional Comments:
-//   x0 e implementado como zero constante e nao ocupa o array. Nao ha reset;
-//   os registradores x1 a x31 permanecem indefinidos ate serem escritos.
+//   Nao ha reset: os registradores partem do valor do initial (zero), que vale
+//   so na carga do FPGA.
 //////////////////////////////////////////////////////////////////////////////////
 
 
@@ -25,10 +26,11 @@
  * @file register_file.sv
  * @brief Banco de registradores inteiros do processador RV32I.
  *
- * Armazena os registradores x1 a x31, oferece duas leituras combinacionais e
+ * Armazena os registradores x0 a x31, oferece duas leituras combinacionais e
  * uma escrita sincronizada na borda de subida do clock. A escrita em x0 e
- * ignorada e as leituras de x0 sempre retornam zero. Este modulo nao possui
- * sinal de reset.
+ * ignorada; como x0 nasce zero (initial) e nunca e escrito, as leituras de x0
+ * sempre retornam zero sem um mux na saida, o que tira uma LUT do caminho de
+ * toda leitura do banco. Este modulo nao possui sinal de reset.
  *
  * @param XLEN Largura dos dados armazenados. Valor padrao: 32 bits.
  * @param REG_XLEN Largura dos enderecos de registrador. Valor padrao: 5 bits.
@@ -55,30 +57,22 @@ module register_file #(
     output logic [XLEN-1:0]      rs2_o
 );
 
-    logic [XLEN-1:0] register_file [1:31];
+    logic [XLEN-1:0] register_file [0:31];
 
     // Valor inicial zero: evita leituras 'X' na simulacao e vira valor de
-    // inicializacao da LUTRAM/FFs na FPGA. Não é um reset (o reset só reinicia o
-    // PC e a instrução registrada).
+    // inicializacao da LUTRAM na FPGA. Não é um reset (o reset só reinicia o
+    // PC e a instrução registrada). Para x0 é o que garante a leitura em zero.
     initial begin
-        for (int i = 1; i < 32; i++) register_file[i] = '0;
+        for (int i = 0; i < 32; i++) register_file[i] = '0;
     end
 
+    // x0 nunca é escrito: continua com o zero do initial.
     always_ff @(posedge clk) begin
         if (written_enable_i && (written_add_i != 5'd0)) begin
             register_file[written_add_i] <= written_data_i;
         end
     end
 
-    always_comb begin
-        if (rs1_add_i == 5'd0)
-            rs1_o = 32'd0;
-        else
-            rs1_o = register_file[rs1_add_i];
-
-        if (rs2_add_i == 5'd0)
-            rs2_o = 32'd0;
-        else
-            rs2_o = register_file[rs2_add_i];
-    end
+    assign rs1_o = register_file[rs1_add_i];
+    assign rs2_o = register_file[rs2_add_i];
 endmodule
