@@ -87,6 +87,9 @@ Não há `mem_read`: a leitura da `data_memory` é sempre combinacional e só é
 
 Padrões (opcode desconhecido / NOP): ALU `OP_ADD`, A = rs1, B = rs2, sem desvio
 (`OP_BCT`, enable 0), PC write 1, sem escrita em memória/registrador, WORD/UNSIGNED, ALU no WB.
+JALR com `funct3 ≠ 000` vira NOP como os demais, mas o `branch_control` fica `OP_BIR` (o
+`control_unit` não olha o `funct3` para ele); sem efeito, porque o enable fica 0. Isso tira o
+`funct3` da decodificação da base do alvo (21/11/2026, `docs/TIMING.md`).
 
 ### 5.2 `branch_op_t` (`branch_pkg`)
 
@@ -98,9 +101,16 @@ Padrões (opcode desconhecido / NOP): ALU `OP_ADD`, A = rs1, B = rs2, sem desvio
 | `11` | `OP_BIR` | sempre (JALR) | `(rs1 + imm) & ~1` |
 
 A comparação vem de um comparador dedicado da `execution`, que compara `rs1` com `rs2` direto,
-sem os muxes de operando nem a ALU. O `alu_op_t` do desvio só escolhe qual comparação usar:
-`OP_SLT` → `$signed(rs1) < $signed(rs2)` (BLT/BGE), `OP_SLTU` → `rs1 < rs2` (BLTU/BGEU) e
-qualquer outro, na prática `OP_CMP` → `rs1 == rs2` (BEQ/BNE).
+sem os muxes de operando nem a ALU. Ela é escolhida pelo `funct3` da instrução (porta
+`execution.funct3_i`, ligada no `core` a `instruction[14:12]`):
+
+- `funct3[2] = 0` → `rs1 == rs2` (BEQ/BNE);
+- `funct3[2] = 1` → `rs1 < rs2`, com sinal se `funct3[1] = 0` (BLT/BGE) e sem sinal se
+  `funct3[1] = 1` (BLTU/BGEU).
+
+É uma cadeia de carry só, em dígitos de 2 bits; a comparação com sinal inverte o bit 31 dos dois
+operandos. O `alu_op_t` que o `control_unit` emite nos branches (`OP_CMP`/`OP_SLT`/`OP_SLTU`, §5.3)
+não é usado pelo datapath desde 21/11/2026; ficou por decisão, para não mexer no controle.
 
 ### 5.3 Matriz por grupo
 
@@ -119,7 +129,8 @@ qualquer outro, na prática `OP_CMP` → `rs1 == rs2` (BEQ/BNE).
 | AUIPC | 1 | PC | imm | 0 | — | 0 | `OP_ADD` | 0 |
 
 JAL/JALR gravam `PC+4` passando-o pela ALU (`OP_PASS_B` com B = PC+4); o alvo do salto é
-calculado num somador separado dentro do `execution`.
+calculado num somador separado dentro do `execution`. Nos branches, o `alu_op_t` da matriz não é
+usado pelo datapath: a comparação vem do `funct3` (§5.2).
 
 ## 6. ALU (`alu`, `alu_pkg::alu_op_t`)
 
@@ -136,7 +147,7 @@ calculado num somador separado dentro do `execution`.
 | `1000` | `OP_SLT` | 1 se A < B (com sinal), senão 0 |
 | `1001` | `OP_SLTU` | 1 se A < B (sem sinal) = `~carry` de A + ~B + 1 |
 | `1010` | `OP_PASS_B` | B |
-| `1011` | `OP_CMP` | 0: não é calculado pela ALU; só escolhe a igualdade no comparador de desvio (§5.2) |
+| `1011` | `OP_CMP` | 0: não é calculado pela ALU; emitido nos BEQ/BNE, sem uso no datapath (a comparação vem do `funct3`, §5.2) |
 
 Saída: `alu_o` (resultado de 32 bits). A ALU não decide desvios: a condição vem do comparador
 dedicado da `execution` (§5.2). SLT e SLTU continuam na ALU para SLT, SLTI, SLTU e SLTIU.
@@ -167,10 +178,10 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | `search` | `clk`, `reset_i`, `pc_write_i`, `pc_branch_i`, `new_pc_i` | `instr_o`, `pc_o`, `pc_next` | `pc_next = PC+4`; próximo PC `pc_sel = reset_i ? 0 : pc_write_i ? (pc_branch_i ? new_pc_i : pc_next) : PC`; na borda, PC = `pc_sel`. `pc_sel` também endereça a `instruction_memory`, e na mesma borda o registrador `instr_o` recebe a palavra lida, então é a instrução do PC atual; nasce com a palavra 0 de `MEM_FILE` |
 | `instruction_memory` | `addr_i` (próximo PC) | `instr_o` | ROM de palavras, leitura combinacional por `addr_i[..:2]`, carregada de `MEM_FILE` |
 | `decoder` | `clk`, `instruction_i`, `written_data_i` | `rs1_o`, `rs2_o`, `imm_o` + todas as saídas do `control_unit` | rd=`[11:7]`, rs1=`[19:15]`, rs2=`[24:20]` |
-| `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional; escrita na borda se enable e rd≠0; x0 não existe no array |
+| `register_file` | `clk`, `written_enable_i`, `written_data_i`, `written_add_i`, `rs1_add_i`, `rs2_add_i` | `rs1_o`, `rs2_o` | leitura combinacional, direto do array (sem mux de zero); escrita na borda se enable e rd≠0; x0 ocupa a posição 0, nasce 0 (`initial`) e nunca é escrito |
 | `imm_gen` | `instruction_i` | `imm_o` | §4 |
 | `control_unit` | `instruction_i` | §5.1 | §5 |
-| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o`, `mem_io_o`, `mem_page0_o` | §5.2 (condição pelo comparador dedicado `rs1` × `rs2`); `pc_branch_o = (imm + base) & ~1`; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B); `mem_io_o` = `mem_addr_o[31:28] == 4`, `mem_page0_o` = `mem_addr_o[31:12] == 0`, calculadas sem esperar o somador e exatas só com imediato de 12 bits (load/store; §9) |
+| `execution` | `pc_next_i`, `pc_i`, `imm_i`, `reg_data1_i`, `reg_data2_i`, `alu_control_i`, `branch_control_i`, `branch_enable_i`, `control_alu_a`, `control_alu_b`, `funct3_i` | `alu_result_o`, `pc_branch_o`, `branch_taken_o`, `mem_addr_o`, `mem_io_o`, `mem_page0_o` | §5.2 (condição pelo comparador dedicado `rs1` × `rs2`, escolhida por `funct3_i`); `pc_branch_o = (imm + base) & ~1`, base = `rs1` se `branch_control_i == OP_BIR`, senão PC; `mem_addr_o = reg_data1_i + imm_i` (somador dedicado, independe da ALU e dos muxes A/B); `mem_io_o` = `mem_addr_o[31:28] == 4`, `mem_page0_o` = `mem_addr_o[31:12] == 0`, calculadas sem esperar o somador e exatas só com imediato de 12 bits (load/store; §9) |
 | `alu` | `a_i`, `b_i`, `alu_op_i` | `alu_o` | §6 |
 | `data_memory` | `clk`, `mem_write_i`, `mem_width_i`, `mem_signed_i`, `addr_i`, `addr_io_i`, `addr_page0_i`, `data_i`, `io_in0_i` … `io_in3_i` (32 bits) | `data_o`, `io_out0_o` … `io_out3_o` (32 bits) | §9 |
 | `write_back` | `alu_result_i`, `mem_data_i`, `mem_to_reg_i` | `wb_data_o` | `mem_to_reg_i ? mem_data_i : alu_result_i` |
@@ -180,7 +191,7 @@ Convenção: portas com `_i`/`_o`; saídas de controle levam o prefixo do bloco 
 | Sinal no `core` | Origem | Destino(s) |
 | :-- | :-- | :-- |
 | `reset_i` | porta do `core` (`top_core`: `~CPU_RESETN`) | `search.reset_i` |
-| `instruction` | `search.instr_o` | `decoder.instruction_i` |
+| `instruction` | `search.instr_o` | `decoder.instruction_i`; o campo `[14:12]` (funct3) vai também para `execution.funct3_i` |
 | `pc` | `search.pc_o` | `execution.pc_i` |
 | `pc_next` (PC+4) | `search.pc_next` | `execution.pc_next_i` |
 | `rs1_data` | `decoder.rs1_o` | `execution.reg_data1_i` |

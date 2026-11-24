@@ -215,11 +215,14 @@ module control_unit
 
             OPCODE_JALR: begin
                 // JALR so e valido com funct3 = 000; caso contrario vira NOP.
+                // OP_BIR (base rs1 do alvo) nao olha o funct3: com funct3
+                // invalido o enable fica 0 e o desvio nao acontece. Medido em
+                // 21/11/2026: assim o core fecha 100 MHz nos dois fluxos.
+                execution_branch_control_o = OP_BIR;
                 if (funct3 == F3_JALR) begin
                     execution_alu_control_o = OP_PASS_B;
                     execution_control_alu_b_o = 2'b10; // PC + 4 para write-back
                     execution_branch_enable_o = 1'b1;
-                    execution_branch_control_o = OP_BIR;
                     register_file_written_enable_o = 1'b1;
                 end
             end
