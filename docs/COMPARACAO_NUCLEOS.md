@@ -166,7 +166,9 @@ Excluídos antes da medição, por não serem monociclo ou estarem incompletos: 
   uma BRAM síncrona e por isso perdem o CPI = 1, nenhum outro registra a instrução. Neles o caminho crítico
   começa no PC e atravessa a ROM, e 8 dos 9 usam a ALU para o endereço da DMEM e 5 deles também para decidir o
   desvio. O TCC usa instrução registrada, comparador de desvio e somador de endereço dedicados, e o write-back de 2
-  entradas. Com isso fica em 12 níveis, contra 14 a 28 dos outros.
+  entradas. Com isso fica em 12 níveis e 10,18 ns. Só o Rudi e o Hariesh também têm 12 níveis, mas o caminho do
+  Rudi começa na saída de uma BRAM (clock-to-out maior, 12,96 ns) e o do Hariesh precisa caber em meio ciclo. Os
+  outros 7 vão de 14 a 28 níveis.
 - **A instrução registrada não é um estágio de pipeline.** A ROM é endereçada pelo *próximo* PC, e a instrução é
   registrada na mesma borda que o PC, então o registrador sempre guarda `ROM[PC]`, a instrução do ciclo corrente.
   A leitura da ROM continua dentro do ciclo: o caminho crítico medido é instrução → banco (LUTRAM) → comparador →
@@ -175,9 +177,11 @@ Excluídos antes da medição, por não serem monociclo ou estarem incompletos: 
   pelo próximo PC, que o Rudi também usa com BRAM; custa 32 FFs e mantém o CPI = 1 em todas as instruções.
 - **Reset nas memórias** (§7): os núcleos que zeram o banco ou a DMEM no reset (07, 09, 11 no banco) perdem a
   LUTRAM. A área cresce até 30×, e a potência, o tempo de compilação e o roteamento pioram junto. O TCC só reseta o PC.
-- **Área:** o TCC está na faixa dos núcleos com memórias em LUTRAM (1.176 a 1.984 LUTs), com IMEM de 4 KiB, o
-  programa completo, MMIO e as 37 instruções corretas. Os que ficaram menores (Zongo, Rudi, Hariesh) cobrem menos
-  (sem byte/halfword ou MMIO, memórias menores) ou usam BRAM.
+- **Área:** o TCC (1.266 LUTs) está no meio da faixa dos núcleos com DMEM e banco em LUTRAM, que vai de 867 a
+  1.984 LUTs (Hariesh, Zongo, Asghar e basic_rv32s), mesmo com IMEM de 4 KiB, o programa completo, MMIO e as 37
+  instruções corretas. Os dois desse grupo que ficaram menores, Hariesh (867) e Zongo (1.176), cobrem menos: sem
+  byte/halfword corretos nem MMIO, e com IMEM 4× (Zongo) a 16× (Hariesh) menor. O Rudi (985) fica abaixo porque as
+  memórias estão em BRAM.
 - **Corretude** (§5): só o TCC, o Rudi e o BRISC-V executam as 37 instruções pela leitura do código. Só o TCC e o
   Rudi tratam a codificação inválida como NOP.
 - **Números publicados pelos autores** não são comparáveis direto: outro FPGA (Zongo em Zynq, BRISC-V em Cyclone IV),
