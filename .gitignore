@@ -39,3 +39,6 @@ desktop.ini
 
 # Saida do scripts/run_tb.ps1
 build/
+
+# Artigos de referência (PDFs baixados e resumos; não versionar)
+artigos/
