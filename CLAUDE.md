@@ -76,6 +76,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build_sw.ps1 leds -Install   
 - `data.mem` = bytes in address order (byte at address 0 first), assembled by `data_memory`'s `initial` into the little-endian word `mem[w] = {byte 4w+3, …, byte 4w}` (`mem` is a 1-D array of 32-bit words so Vivado infers LUTRAM).
 - `tb_program` (in `run_tb.ps1`) rebuilds `selftest`, runs it on `core` until `_halt`, and passes if `main` returned 0 (else `a0` = failing test group, LEDs = `0xE000|group`). Add C checks to `sw/apps/selftest/main.c`; keep inputs `volatile` or GCC folds them at compile time.
 
+## TCC (LaTeX)
+
+The user's thesis lives in `tcc/` (UTFPR/abnTeX2 template, `tcc/main.tex`, chapters in `tcc/capitulos/`), written in Portuguese. **Only edit files in `tcc/capitulos/`**; `tcc/main.tex` only in the chapter `\include` lines and only after asking; everything else (`main.bib`, `PreTexto/`, `variaveis.tex`, figures, preamble) is suggest-only. **When writing, reviewing or compiling it, load the project skill `escrever-tcc`**: the author's style and chapter structure, what to fix directly vs. only suggest, and the RTL/`docs/` as source of truth for every technical claim. Compile with `scripts/build_tcc.ps1` (pdfLaTeX from TeX Live 2021 at `D:\ProgramFiles\texlive\2021`, not on PATH; builds in `build/tcc/`, output `build/tcc/main.pdf`). The template requires TeX Live 2021 (also what the user selects on Overleaf), so don't add packages that version lacks.
+
 ## Architecture
 
 ```text

@@ -5,7 +5,7 @@ description: Use quando o usuário digitar /explicar ou pedir para explicar algo
 
 # Explicar algo do projeto
 
-Objetivo: o usuário entender **o que a coisa faz** logo na primeira olhada e depois **de onde ela vem** e **por que existe**, nessa ordem.
+Objetivo: o usuário entender **o que a coisa faz** logo na primeira olhada (parágrafo de abertura) e depois **de onde ela vem** e **por que existe**, nessa ordem.
 
 Antes de escrever, leia o código envolvido (declaração, onde é gerado, onde é usado, testbench que cobre). O RTL é a fonte da verdade; não explique de memória. Responda em português.
 
@@ -19,13 +19,21 @@ Antes de escrever, leia o código envolvido (declaração, onde é gerado, onde 
 
 Se a pergunta misturar os dois (ex.: "o que o `search` faz e o que é `pc_next`"), responda o bloco no modo B e o valor no modo A, nessa ordem, cada um com seu título.
 
+## Abertura (os dois modos): parágrafo da função geral
+
+Toda explicação começa com **um parágrafo curto (1 a 3 frases), direto e técnico**, dizendo a função geral da coisa e, se for o essencial, o mecanismo principal. Sem título antes, sem contexto histórico, sem "vou explicar". Só depois vêm as tabelas de cada modo. Exemplos do tom:
+
+> `mem_page0_o` controla quando a RAM é acessada: indica se o endereço do load/store cai nos primeiros 4 KiB, calculado de forma adiantada a partir de `rs1[31:12]` e do sinal do imediato, sem esperar o carry do somador `rs1 + imm`.
+
+> Esse arquivo define os conectores de entrada e saída padrão do projeto: liga cada porta do `top_core` a um pino da Nexys A7 (clock, reset, LEDs, chaves, botões, 7 segmentos, PMOD).
+
 ## Modo A — Valor específico
 
 Foco: **o que o valor significa** e **onde ele é utilizado**.
 
-### A1. Tabela-resumo (primeiro de tudo)
+### A1. Tabela-resumo (logo após o parágrafo de abertura)
 
-Uma tabela direta, sem texto antes dela além de no máximo uma linha de título: **valor → o que acontece**. Se o efeito depende de outro sinal, inclua as combinações (ex.: `addr_page0_i` × `addr_io_i`) e marque combinações impossíveis como "não acontece" com o motivo curto.
+Uma tabela direta, sem outro texto entre ela e o parágrafo de abertura: **valor → o que acontece**. Se o efeito depende de outro sinal, inclua as combinações (ex.: `addr_page0_i` × `addr_io_i`) e marque combinações impossíveis como "não acontece" com o motivo curto.
 
 ### A2. O que é
 
@@ -58,9 +66,9 @@ Seção própria no final: o motivo do projeto (ex.: tirar o carry de 32 bits do
 
 Foco: **o que entra, o que sai** e **como a saída é produzida**.
 
-### B1. Tabela de entradas e saídas (primeiro de tudo, sempre)
+### B1. Tabela de entradas e saídas (logo após o parágrafo de abertura, sempre)
 
-Antes de qualquer texto além de no máximo uma linha de título, monte a tabela de interface do bloco:
+Sem outro texto entre ela e o parágrafo de abertura, monte a tabela de interface do bloco:
 
 | Direção | Nome | Largura/tipo | De onde vem / para onde vai | Significado |
 |---|---|---|---|---|

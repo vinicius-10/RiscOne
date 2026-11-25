@@ -40,9 +40,11 @@ desktop.ini
 # Saida do scripts/run_tb.ps1
 build/
 
+# Livros e artigos de referencia do TCC (direitos autorais, nao publicar)
+tcc/artigos/
+
 # Artigos de referência (PDFs baixados e resumos; não versionar)
 artigos/
 
-#Arquivo de anotação sobre o projeto (não versionar)
+# Arquivo de anotação sobre o projeto (não versionar)
 Notas.md
-
