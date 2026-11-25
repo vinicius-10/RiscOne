@@ -1,0 +1,6 @@
+# Estatística de linguagens do GitHub (linguist)
+# Imagens EPS do modelo do TCC são contadas como "PostScript"; não são código.
+*.eps linguist-detectable=false
+# Classe e estilo bibliográfico vêm do modelo UTFPR/abnTeX2 (não foram escritos aqui).
+tcc/*.cls linguist-vendored
+tcc/*.bst linguist-vendored
