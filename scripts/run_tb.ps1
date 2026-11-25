@@ -43,9 +43,7 @@ $Tests = [ordered]@{
     tb_alu               = Src $Sim   tb_alu               @('alu')
     tb_control_unit      = Src $Sim   tb_control_unit      @('control_unit')
     # Sistema completo: programa RV32I executado no core.
-    tb_core              = Src $Sim   tb_core              @('alu', 'control_unit', 'imm_gen', 'register_file',
-                                                             'decoder', 'execution', 'instruction_memory',
-                                                             'search', 'data_memory', 'write_back', 'core')
+    tb_core              = Src $Sim   tb_core              @('core')   # core unico: sem submodulos
     tb_data_memory       = Src $Sim   tb_data_memory       @('data_memory')
     tb_decoder           = Src $Sim   tb_decoder           @('register_file', 'imm_gen', 'control_unit', 'decoder')
     tb_execution         = Src $Sim   tb_execution         @('alu', 'execution')
@@ -54,9 +52,7 @@ $Tests = [ordered]@{
     tb_register_file     = Src $Sim   tb_register_file     @('register_file')
     tb_write_back        = Src $Sim   tb_write_back        @('write_back')
     # Programa C (sw/apps/selftest) compilado com riscv-gcc e executado no core.
-    tb_program           = Src $Sim   tb_program           @('alu', 'control_unit', 'imm_gen', 'register_file',
-                                                             'decoder', 'execution', 'instruction_memory',
-                                                             'search', 'data_memory', 'write_back', 'core')
+    tb_program           = Src $Sim   tb_program           @('core')   # core unico: sem submodulos
 }
 
 # Testbenches que usam um programa compilado (scripts/build_sw.ps1) em vez dos

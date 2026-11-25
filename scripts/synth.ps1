@@ -60,8 +60,7 @@ if ($Compare) {
 
 # Ordem: packages antes dos modulos que os importam.
 $Pkgs = 'opcode_pkg', 'func3_pkg', 'func7_pkg', 'alu_pkg', 'branch_pkg', 'mem_pkg'
-$Mods = 'alu', 'control_unit', 'imm_gen', 'register_file', 'decoder', 'execution',
-        'instruction_memory', 'search', 'data_memory', 'write_back', 'core', 'top_core'
+$Mods = 'core', 'top_core'   # core unico: sem submodulos
 $Srcs = @($Pkgs + $Mods | ForEach-Object { (Join-Path $Rtl "$_.sv") -replace '\\', '/' })
 
 $FamTcl = (Join-Path $PSScriptRoot 'familias.tcl') -replace '\\', '/'
@@ -114,6 +113,7 @@ report_timing -max_paths 20 -nworst 1 -path_type summary -file paths.rpt
 report_utilization -file util.rpt
 report_utilization -hierarchical -hierarchical_depth 4 -file util_hier.rpt
 report_methodology -file methodology.rpt
+report_power -file power.rpt
 source {$FamTcl}
 "@
 Set-Content -Path (Join-Path $Out 'run.tcl') -Value $tcl -Encoding ascii
@@ -185,6 +185,15 @@ $dsp  = UtilVal 'DSPs'
 $f7   = UtilVal 'F7 Muxes'
 $f8   = UtilVal 'F8 Muxes'
 
+# Consumo (report_power vetorless: taxas de chaveamento padrao do Vivado, sem
+# simulacao; serve para comparar versoes, nao como valor absoluto).
+$pwrFile = Join-Path $Out 'power.rpt'
+$pwr = if (Test-Path $pwrFile) { Get-Content $pwrFile } else { @() }
+function PwrVal([string]$name) {
+    foreach ($l in $pwr) { if ($l -match "^\|\s*$([regex]::Escape($name))\s*\|\s*([\d.]+)") { return $Matches[1] } }
+    return '-'
+}
+
 # Latches inferidos e avisos criticos (no log da sintese).
 $latches  = @($log | Where-Object { $_ -match 'Synth 8-327|inferring latch' })
 $critWarn = @($log | Where-Object { $_ -match '^CRITICAL WARNING' })
@@ -207,6 +216,7 @@ $appUsed = if (Test-Path (Join-Path $Out 'app.txt')) { (Get-Content (Join-Path $
 $r.Add("Tag: $Tag  |  programa: $appUsed  |  $etapaRpt  |  $([math]::Round($sw.Elapsed.TotalMinutes,1)) min")
 $r.Add(('Timing: periodo {0} ns | WNS {1} ns | TNS {2} ns | endpoints violando {3} | WHS {4} ns | Fmax estimada {5} MHz' -f $period, $wns, $tns, $failEp, $whs, $fmax))
 $r.Add("Area: LUTs $luts (LUTRAM $lutram) | FFs $ffs | BRAM $bram | DSP $dsp | F7 $f7 | F8 $f8")
+$r.Add("Consumo (estimativa vetorless): total $(PwrVal 'Total On-Chip Power (W)') W | dinamico $(PwrVal 'Dynamic (W)') W | estatico $(PwrVal 'Device Static (W)') W (ver power.rpt)")
 $r.Add("Latches inferidos: $($latches.Count) | CRITICAL WARNINGs: $($critWarn.Count)")
 if (Test-Path $methFile) {
     $r.Add("Methodology: $($meth.Count) regras violadas (ver methodology.rpt)")
