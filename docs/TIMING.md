@@ -57,6 +57,9 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-21 | x0_fisico / _max | placa | `register_file`: x0 no array (nasce 0, nunca escrito), leitura sem o mux de zero | -0,213 / +0,053 | 97,9 / 100,5 | 1162 / 1189 | 172 | 98 | 0 | **mantido**: −104 LUTs; no máximo todas as famílias iguais ou melhores. No padrão a família "RF sem RAM" cai 0,47 ns (caminho 82% rota) |
 | 2026-11-21 | cmp_funct3 / _max | placa | `execution`: comparador de desvio em cadeia única com o modo pelo `funct3` (porta `funct3_i`), decisão "toma se verdadeiro / se falso" e base do alvo sem `enable` | -0,256 / +0,050 | 97,5 / 100,5 | 1161 / 1163 | 172 | 98 | 0 | próximo PC melhora nos dois fluxos (+0,042 / +0,148); o pior passa a ser a flag de região → load → RF (−0,256 no padrão). Pior que o protótipo ac2, que só difere numa linha do `control_unit` (ver seção) |
 | 2026-11-21 | cmp_funct3_jalr / _max | placa | o mesmo + `control_unit`: JALR emite `OP_BIR` sem olhar o `funct3` (o enable continua estrito) — **estado atual** | **+0,091 / +0,141** | 100,9 / 101,4 | 1159 / 1176 | 172 | 98 | 0 | **mantido** (decisão do usuário): **fecha 100 MHz nos dois fluxos**, idêntico ao protótipo ac2. A linha só muda o netlist o bastante para outro placement (a estrutura é a mesma de `cmp_funct3`) |
+| 2026-11-24 | core_unico, core_plano, plano_a1..a4 (experimentos) | placa | o core inteiro num só módulo: em blocos `if (1)`, num só escopo, e com as seções reordenadas (branches próprias) | −0,143 / −0,224 | 98,6 / 97,8 | 1211 / 1198 | 172 | 99 | 0 | **pior** que o hierárquico; a ordem do código não muda nada. Ver seção "Experimentos de hierarquia" |
+| 2026-11-25 | hier_selftest / _max | selftest | estado atual (`cmp_funct3_jalr`) com o programa selftest | −0,070 / +0,211 | 99,3 / 102,2 | 1156 / 1154 | 172 | 98 | 0 | referência para as variantes divididas |
+| 2026-11-25 | div_v1..div_v7 (experimentos) | selftest / placa | módulos divididos em submódulos (branches `hier_div_v1`..`v7`) | −0,293 a +0,049 | | 1150–1227 | 172 | 98 | 0 | só a ALU dividida muda a lógica (pior). O resto fica no ruído e não fica melhor de forma consistente. Ver seção "Experimentos de hierarquia" |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
@@ -114,6 +117,47 @@ O comparador novo foi conferido contra um modelo de referência em 3,6 milhões 
   - seletor de write-back de 2 bits codificado no controle, para a escolha RAM × MMIO e o mux da ALU caberem na última LUT;
   - AUIPC pelo somador do alvo e `PC+4` direto no write-back. Isso tira o mux A da ALU e a 3ª entrada do B;
   - duplicar o somador do endereço para dividir o fanout de 138.
+
+## Experimentos de hierarquia (24–25/11/2026)
+
+Pergunta: a divisão em módulos muda o resultado? Todas as variantes partem de `cmp_funct3_jalr` e copiam o RTL sem mudar a lógica; todas passam nos 10 testbenches. Cada uma está commitada numa branch própria (não integrar; só registro), e os worktrees foram removidos.
+
+### Menos hierarquia: tudo dentro do `core` (programa placa)
+
+| Branch | Variante | WNS (ns) | TNS (ns) / endpoints | LUTs | F7/F8 |
+| :-- | :-- | --: | --: | --: | --: |
+| — | hierárquico (`hier_paralelo`) | **+0,091** | 0 / 0 | 1159 | 143/32 |
+| `core_unico` | submódulos copiados para o `core.sv` em blocos `if (1) begin : nome` | −0,143 | −0,751 / 11 | 1211 | 188/32 |
+| `core_plano` | o mesmo num só escopo, sem os blocos (sinais renomeados) | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+| `core_plano_a1`..`a4` | `core_plano` com as seções em 4 ordens diferentes no arquivo | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+
+- **A ordem do código não importa:** as 4 reordenações deram `util.rpt` idêntico e `timing.rpt` igual, exceto nomes de redes gerados pelo Vivado.
+- **A forma do código importa:** com blocos nomeados ou sem eles, o resultado muda (−0,143 × −0,224 ns).
+- **Achatar piora:** sem as fronteiras de módulo, a síntese junta lógica de blocos vizinhos (+45 F7, +40–50 LUTs) e o timing piora ~0,3 ns.
+
+### Mais hierarquia: submódulos novos
+
+WNS em ns (endpoints violando); LUTs entre parênteses. Referência refeita com o programa `selftest` (`hier_selftest`), porque as variantes usaram o padrão do script.
+
+| Branch | Divisão | selftest | selftest `-MaxEffort` | placa |
+| :-- | :-- | --: | --: | --: |
+| — | hierárquico (referência) | −0,070 (5) (1156) | +0,211 (1154) | +0,091 (1159) |
+| `hier_div_v1` | `execution` → `branch_comparator`, `branch_unit`, `mem_addr_unit` | +0,016 (1150) | +0,234 (1153) | −0,350 (19) (1168) |
+| `hier_div_v2` | `data_memory` → `mmio`, `load_align`, `store_align` | −0,097 (2) (1164) | | |
+| `hier_div_v3` | `alu` → `alu_arith`, `alu_logic`, `alu_shift` | **−0,293 (29) (1227)** | | |
+| `hier_div_v4` | `control_unit` → `main_decoder`, `alu_decoder` (equivalência conferida em 2^17 combinações) | −0,136 (14) (1156) | | |
+| `hier_div_v5` | `search` → `next_pc` (PC+4 e mux do próximo PC) | +0,049 (1161) | +0,219 (1164) | +0,028 (1167) |
+| `hier_div_v6` | V4 + V5 | −0,030 (1) (1153) | | |
+| `hier_div_v7` | V1 + V5 | −0,140 (4) (1155) | +0,095 (1168) | −0,082 (1) (1170) |
+
+- **Só a ALU dividida muda a lógica:** são +71 LUTs e −0,29 ns, porque somador, lógica e shift deixam de compartilhar LUTs e o mux final fica de fora. A ALU fica num módulo só.
+- **As outras divisões ficam no ruído:**
+  - a área quase não muda (±15 LUTs) e o F7/F8 fica igual;
+  - a ordem entre as variantes troca de programa para programa (V1 é a melhor no selftest e a pior na placa);
+  - com `-MaxEffort`, hierárquico, V1 e V5 empatam (+0,21 a +0,23 ns);
+  - V7 (V1 + V5) foi pior que cada uma separada.
+- **Conclusão:** a hierarquia atual já está boa. Achatar piora, e dividir mais não ajuda no timing. Divisões como a V1 só valeriam pela organização do código.
+- **Referência com o selftest:** o estado atual dá −0,070 ns com o selftest e +0,091 ns com o programa da placa. Compare sempre com o mesmo programa.
 
 ## Diagnóstico após `ir_search` (04/11/2026)
 
