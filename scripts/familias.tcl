@@ -15,7 +15,7 @@ proc fam_cells {filter} { return [get_cells -hier -quiet -filter $filter] }
 set rf_ram [fam_cells {IS_PRIMITIVE && REF_NAME =~ RAM* && NAME =~ *register_file_inst/*}]
 set dm_ram [fam_cells {IS_PRIMITIVE && REF_NAME =~ RAM* && NAME =~ *data_memory_inst/*}]
 set pc_ff  [fam_cells {IS_SEQUENTIAL && REF_NAME =~ FD* && NAME =~ *search_inst/*}]
-set io_ff  [fam_cells {IS_SEQUENTIAL && REF_NAME =~ FD* && NAME =~ *data_memory_inst/io_out*}]
+set io_ff  [fam_cells {IS_SEQUENTIAL && REF_NAME =~ FD* && NAME =~ *data_memory_inst/mmio_inst/io_out*}]
 
 array unset ::fam_is_rf
 array unset ::fam_is_dm

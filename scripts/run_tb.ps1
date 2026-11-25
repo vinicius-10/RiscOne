@@ -45,8 +45,9 @@ $Tests = [ordered]@{
     # Sistema completo: programa RV32I executado no core.
     tb_core              = Src $Sim   tb_core              @('alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',
-                                                             'search', 'data_memory', 'write_back', 'core')
-    tb_data_memory       = Src $Sim   tb_data_memory       @('data_memory')
+                                                             'search', 'mmio', 'load_align', 'store_align', 'data_memory',
+                                                             'write_back', 'core')
+    tb_data_memory       = Src $Sim   tb_data_memory       @('mmio', 'load_align', 'store_align', 'data_memory')
     tb_decoder           = Src $Sim   tb_decoder           @('register_file', 'imm_gen', 'control_unit', 'decoder')
     tb_execution         = Src $Sim   tb_execution         @('alu', 'execution')
     # tb_instruction_fetch define seu proprio modelo de instruction_memory.
@@ -56,7 +57,8 @@ $Tests = [ordered]@{
     # Programa C (sw/apps/selftest) compilado com riscv-gcc e executado no core.
     tb_program           = Src $Sim   tb_program           @('alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',
-                                                             'search', 'data_memory', 'write_back', 'core')
+                                                             'search', 'mmio', 'load_align', 'store_align', 'data_memory',
+                                                             'write_back', 'core')
 }
 
 # Testbenches que usam um programa compilado (scripts/build_sw.ps1) em vez dos

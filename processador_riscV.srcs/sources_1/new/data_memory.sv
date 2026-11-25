@@ -11,7 +11,7 @@
 // Tool Version: Vivado 2025.2
 // Description: Memoria de dados byte-addressable com suporte a MMIO integrado (Otimizada para Caminho Crítico).
 //
-// Dependencies: mem_pkg
+// Dependencies: mem_pkg, mmio, load_align, store_align
 //
 // Revision:
 // Revision 0.02 - Suporte a MMIO integrado com registradores de E/S e caminho crítico otimizado.
@@ -27,6 +27,11 @@
  * O MMIO (addr[31:28] == 4'h4, registrador por addr[5:2]) tem quatro saidas e
  * quatro entradas genericas de 32 bits; o significado de cada uma na placa e
  * definido no top_core.
+ *
+ * Submodulos: mmio (registradores de saida e leitura das entradas),
+ * load_align (selecao de byte/halfword e extensao de sinal das leituras) e
+ * store_align (faixas de byte e dado replicado das escritas). O array da RAM,
+ * sua leitura/escrita e o mux RAM x MMIO ficam aqui.
  *
  * @param addr_io_i Endereco no espaco de MMIO (addr_i[31:28] == 4'h4),
  *                  calculado pela execution sem esperar o somador.
@@ -114,12 +119,8 @@ module data_memory
     // LÓGICA DE LEITURA DA RAM INTERNA (Assíncrona)
     // =========================================================================
     logic [31:0] ram_word_data;
-    logic [31:0] io_data_out;   // palavra lida dos periféricos (definida abaixo)
+    logic [31:0] io_data_out;   // palavra lida dos periféricos (mmio)
     logic [31:0] word_data;     // palavra selecionada: RAM ou MMIO
-    logic [7:0]  byte_sel;
-    logic [15:0] half_sel;
-    logic        sign_b;
-    logic        sign_h;
     logic [31:0] load_data;
 
     always_comb begin
@@ -133,28 +134,13 @@ module data_memory
     // quanto para o MMIO (ex.: LBU em 0x4000_0011 retorna io_in0_i[15:8]).
     assign word_data = is_io_space ? io_data_out : ram_word_data;
 
-    always_comb begin
-        case (byte_offset)
-            2'b00:  byte_sel = word_data[7:0];
-            2'b01:  byte_sel = word_data[15:8];
-            2'b10:  byte_sel = word_data[23:16];
-            2'b11:  byte_sel = word_data[31:24];
-        endcase
-    end
-
-    assign half_sel = byte_offset[1] ? word_data[31:16] : word_data[15:0];
-
-    assign sign_b = (mem_signed_i == MEM_SIGNED) & byte_sel[7];
-    assign sign_h = (mem_signed_i == MEM_SIGNED) & half_sel[15];
-
-    always_comb begin
-        case (mem_width_i)
-            MEM_WIDTH_BYTE: load_data = {{24{sign_b}}, byte_sel};
-            MEM_WIDTH_HALF: load_data = {{16{sign_h}}, half_sel};
-            MEM_WIDTH_WORD: load_data = word_data;
-            default:        load_data = word_data;
-        endcase
-    end
+    load_align load_align_inst (
+        .word_data_i   (word_data),
+        .byte_offset_i (byte_offset),
+        .mem_width_i   (mem_width_i),
+        .mem_signed_i  (mem_signed_i),
+        .load_data_o   (load_data)
+    );
 
     // =========================================================================
     // LÓGICA DE ESCRITA (Síncrona)
@@ -163,23 +149,13 @@ module data_memory
     logic [31:0] wdata;
     logic        ram_write_en;
 
-    always_comb begin
-        case (mem_width_i)
-            MEM_WIDTH_BYTE: we_byte = 4'b0001 << byte_offset;
-            MEM_WIDTH_HALF: we_byte = byte_offset[1] ? 4'b1100 : 4'b0011;
-            MEM_WIDTH_WORD: we_byte = 4'b1111;
-            default:        we_byte = 4'b1111;
-        endcase
-    end
-
-    always_comb begin
-        case (mem_width_i)
-            MEM_WIDTH_BYTE: wdata = {4{data_i[7:0]}};
-            MEM_WIDTH_HALF: wdata = {2{data_i[15:0]}};
-            MEM_WIDTH_WORD: wdata = data_i;
-            default:        wdata = data_i;
-        endcase
-    end
+    store_align store_align_inst (
+        .data_i        (data_i),
+        .byte_offset_i (byte_offset),
+        .mem_width_i   (mem_width_i),
+        .we_byte_o     (we_byte),
+        .wdata_o       (wdata)
+    );
 
     // Impede escrita na RAM se o endereço pertencer ao espaço de I/O
     assign ram_write_en = mem_write_i & ~is_io_space & ram_addr_valid;
@@ -191,48 +167,26 @@ module data_memory
         end
     end
 
-    // Habilitação de escrita das saídas (offsets 0..3); entradas não são graváveis
-    logic io_write_out0;
-    logic io_write_out1;
-    logic io_write_out2;
-    logic io_write_out3;
-
-    assign io_write_out0 = mem_write_i && is_io_space && (io_offset == 4'h0);
-    assign io_write_out1 = mem_write_i && is_io_space && (io_offset == 4'h1);
-    assign io_write_out2 = mem_write_i && is_io_space && (io_offset == 4'h2);
-    assign io_write_out3 = mem_write_i && is_io_space && (io_offset == 4'h3);
-
-    // Registradores síncronos das saídas
-    initial begin
-        io_out0_o = '0;
-        io_out1_o = '0;
-        io_out2_o = '0;
-        io_out3_o = '0;
-    end
-
-    // Escrita por faixa de bytes (mesmos we_byte/wdata da RAM): SB/SH alteram
-    // apenas os bytes enderecados.
-    always_ff @(posedge clk) begin
-        for (int b = 0; b < 4; b++) begin
-            if (io_write_out0 && we_byte[b]) io_out0_o[8*b +: 8] <= wdata[8*b +: 8];
-            if (io_write_out1 && we_byte[b]) io_out1_o[8*b +: 8] <= wdata[8*b +: 8];
-            if (io_write_out2 && we_byte[b]) io_out2_o[8*b +: 8] <= wdata[8*b +: 8];
-            if (io_write_out3 && we_byte[b]) io_out3_o[8*b +: 8] <= wdata[8*b +: 8];
-        end
-    end
-
     // =========================================================================
-    // LEITURA DO MMIO: entradas em 0x10..0x1C; saídas (0x00..0x0C) leem 0
+    // MMIO: registradores de saída e leitura das entradas
     // =========================================================================
-    always_comb begin
-        case (io_offset)
-            4'h4:    io_data_out = io_in0_i;
-            4'h5:    io_data_out = io_in1_i;
-            4'h6:    io_data_out = io_in2_i;
-            4'h7:    io_data_out = io_in3_i;
-            default: io_data_out = 32'h0;
-        endcase
-    end
+    mmio mmio_inst (
+        .clk           (clk),
+        .mem_write_i   (mem_write_i),
+        .is_io_space_i (is_io_space),
+        .io_offset_i   (io_offset),
+        .we_byte_i     (we_byte),
+        .wdata_i       (wdata),
+        .io_in0_i      (io_in0_i),
+        .io_in1_i      (io_in1_i),
+        .io_in2_i      (io_in2_i),
+        .io_in3_i      (io_in3_i),
+        .io_out0_o     (io_out0_o),
+        .io_out1_o     (io_out1_o),
+        .io_out2_o     (io_out2_o),
+        .io_out3_o     (io_out3_o),
+        .io_data_o     (io_data_out)
+    );
 
     // =========================================================================
     // MULTIPLEXADOR DE SAÍDA FINAL (Caminho Crítico Otimizado)
