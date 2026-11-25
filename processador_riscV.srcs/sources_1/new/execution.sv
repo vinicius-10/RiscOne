@@ -11,7 +11,8 @@
 // Tool Version: Vivado 2025.2
 // Description: Executa operacoes da ALU e calcula enderecos e condicoes de desvio.
 //
-// Dependencies: alu, alu_pkg, branch_pkg
+// Dependencies: alu, branch_comparator, branch_unit, mem_addr_unit, alu_pkg,
+//               branch_pkg
 //
 // Revision:
 // Revision 0.01 - File Created
@@ -35,6 +36,10 @@
  * `alu_control_i` não participa da comparação. OP_BCT desvia quando a
  * comparação é verdadeira e OP_BCF quando é falsa. OP_BIP e OP_BIR sao desvios
  * incondicionais relativos ao PC e a rs1, respectivamente.
+ *
+ * Submódulos: `alu` (operação), `branch_comparator` (comparação rs1 x rs2),
+ * `branch_unit` (decisão e endereço de destino) e `mem_addr_unit` (endereço
+ * de load/store e flags de região). Os muxes de operando ficam aqui.
  *
  * @param XLEN Largura dos dados e enderecos. Valor padrao: 32 bits.
  * @param pc_next_i Endereco sequencial da instrucao, normalmente PC + 4.
@@ -99,8 +104,6 @@ module execution
     logic [XLEN-1:0] branch_address;
     logic            branch_cond;
     logic            branch_taken;
-    logic [XLEN-1:0] branch_a;
-    logic [XLEN-1:0] branch_b;
 
     assign alu_result_o  = alu_result;
     assign pc_branch_o   = branch_address;
@@ -131,101 +134,39 @@ module execution
     );
 
     // Comparador dedicado dos desvios: rs1 x rs2 direto, sem os muxes de
-    // operando nem a ALU. É uma cadeia de carry só, configurada pelo funct3
-    // (fio da instrução, pronto junto com a leitura do banco): funct3[2] = 0
-    // compara igualdade e 1 compara "menor"; funct3[1] = 1 é sem sinal. Com
-    // sinal = sem sinal com o bit 31 dos dois operandos invertido.
-    // A cadeia anda em dígitos de 2 bits: cmp_eq = dígitos iguais (propaga) e
-    // cmp_lt = dígito de rs1 menor (gera; só no modo "menor"). O carry de
-    // cmp_lt + (cmp_lt ^ cmp_eq) + cin, com cin = 1 no modo igualdade, é o
-    // resultado da comparação; escrito assim, a síntese monta um único
-    // somador de 16 dígitos (4 CARRY4) em vez de três comparadores e um mux.
-    logic              cmp_less;     // 1: "menor"; 0: igualdade
-    logic              cmp_signed;
-    logic [XLEN-1:0]   cmp_a;
-    logic [XLEN-1:0]   cmp_b;
-    logic [XLEN/2-1:0] cmp_eq;
-    logic [XLEN/2-1:0] cmp_lt;
-    logic [XLEN/2:0]   cmp_chain;
+    // operando nem a ALU (cadeia unica configurada pelo funct3).
+    branch_comparator #(
+        .XLEN(XLEN)
+    ) branch_comparator_inst (
+        .reg_data1_i  (reg_data1_i),
+        .reg_data2_i  (reg_data2_i),
+        .funct3_i     (funct3_i),
+        .branch_cond_o(branch_cond)
+    );
 
-    assign cmp_less   = funct3_i[2];
-    assign cmp_signed = ~funct3_i[1];
-    assign cmp_a      = {reg_data1_i[XLEN-1] ^ cmp_signed, reg_data1_i[XLEN-2:0]};
-    assign cmp_b      = {reg_data2_i[XLEN-1] ^ cmp_signed, reg_data2_i[XLEN-2:0]};
+    // Decisao do desvio e somador do endereco de destino.
+    branch_unit #(
+        .XLEN(XLEN)
+    ) branch_unit_inst (
+        .branch_cond_i   (branch_cond),
+        .branch_enable_i (branch_enable_i),
+        .branch_control_i(branch_control_i),
+        .imm_i           (imm_i),
+        .pc_i            (pc_i),
+        .reg_data1_i     (reg_data1_i),
+        .branch_taken_o  (branch_taken),
+        .pc_branch_o     (branch_address)
+    );
 
-    always_comb begin
-        for (int j = 0; j < XLEN/2; j++) begin
-            cmp_eq[j] = (cmp_a[2*j +: 2] == cmp_b[2*j +: 2]);
-            cmp_lt[j] = cmp_less & (cmp_a[2*j +: 2] < cmp_b[2*j +: 2]);
-        end
-    end
-
-    assign cmp_chain   = {1'b0, cmp_lt} + {1'b0, cmp_lt ^ cmp_eq} + {{(XLEN/2){1'b0}}, ~cmp_less};
-    assign branch_cond = cmp_chain[XLEN/2];
-
-    // Decisão: o controle diz antes o que fazer com a comparação verdadeira e
-    // com a falsa; a comparação, que chega por último, só escolhe entre as duas.
-    logic take_if_true;
-    logic take_if_false;
-
-    always_comb begin
-        take_if_true  = 1'b0;
-        take_if_false = 1'b0;
-        if (branch_enable_i) begin
-            case (branch_control_i)
-                OP_BCT:  take_if_true  = 1'b1;
-                OP_BCF:  take_if_false = 1'b1;
-                default: begin                 // OP_BIP, OP_BIR: sempre
-                    take_if_true  = 1'b1;
-                    take_if_false = 1'b1;
-                end
-            endcase
-        end
-    end
-
-    assign branch_taken = branch_cond ? take_if_true : take_if_false;
-
-    // Base do endereço de destino: rs1 no JALR, PC nos demais. Não depende do
-    // enable: o destino só é usado quando o desvio é tomado.
-    assign branch_b = (branch_control_i == OP_BIR) ? reg_data1_i : pc_i;
-
-    assign branch_a       = imm_i;
-    // Zera o bit 0: exigido pelo JALR; inofensivo para branches/JAL, cujo
-    // imediato ja tem bit 0 = 0.
-    assign branch_address = (branch_a + branch_b) & ~XLEN'(1);
-
-    // Endereco da memoria de dados: nao passa pelos muxes de operando nem pelo
-    // mux de saida da ALU.
-    assign mem_addr_o = reg_data1_i + imm_i;
-
-    // Regiao da memoria de dados sem esperar o carry ate o bit 31. Com imediato
-    // de 12 bits, mem_addr_o[31:12] so pode ser rs1[31:12] - 1, + 0 ou + 1,
-    // conforme imm[11] e o carry do bit 11. As flags dos tres candidatos
-    // dependem so de rs1; o carry atravessa apenas 12 bits.
-    logic [12:0] addr_low;
-    logic [19:0] rs1_hi;
-    logic        io_dec, io_mid, io_inc;
-    logic        page0_dec, page0_mid, page0_inc;
-
-    assign addr_low = {1'b0, reg_data1_i[11:0]} + {1'b0, imm_i[11:0]};
-    assign rs1_hi   = reg_data1_i[31:12];
-
-    assign io_mid    = (rs1_hi[19:16] == 4'h4);
-    // rs1_hi + 1: o nibble alto so muda se rs1_hi[15:0] for todo 1.
-    assign io_inc    = (rs1_hi[15:0] == 16'hFFFF) ? (rs1_hi[19:16] == 4'h3) : io_mid;
-    // rs1_hi - 1: o nibble alto so muda se rs1_hi[15:0] for todo 0.
-    assign io_dec    = (rs1_hi[15:0] == 16'h0000) ? (rs1_hi[19:16] == 4'h5) : io_mid;
-
-    assign page0_mid = (rs1_hi == 20'h00000);
-    assign page0_inc = (rs1_hi == 20'hFFFFF);   // rs1_hi + 1 == 0
-    assign page0_dec = (rs1_hi == 20'h00001);   // rs1_hi - 1 == 0
-
-    always_comb begin
-        case ({imm_i[11], addr_low[12]})
-            2'b01:   begin mem_io_o = io_inc; mem_page0_o = page0_inc; end // imm >= 0, carry
-            2'b10:   begin mem_io_o = io_dec; mem_page0_o = page0_dec; end // imm < 0, sem carry
-            default: begin mem_io_o = io_mid; mem_page0_o = page0_mid; end
-        endcase
-    end
+    // Endereco da memoria de dados (rs1 + imediato) e flags de regiao.
+    mem_addr_unit #(
+        .XLEN(XLEN)
+    ) mem_addr_unit_inst (
+        .reg_data1_i(reg_data1_i),
+        .imm_i      (imm_i),
+        .mem_addr_o (mem_addr_o),
+        .mem_io_o   (mem_io_o),
+        .mem_page0_o(mem_page0_o)
+    );
 
 endmodule
