@@ -35,7 +35,10 @@
  * da instrução nasce com a palavra 0 de `MEM_FILE`, então a placa parte sem
  * reset.
  *
- * Próximo PC (`pc_sel`):
+ * Submódulos: `next_pc` (PC + 4 e mux do próximo PC) e `instruction_memory`
+ * (ROM). Os registradores do PC e da instrução ficam aqui.
+ *
+ * Próximo PC (`pc_sel`, calculado em `next_pc`):
  * - reset_i = 1 => 0 (o PC zera e a instrução registrada passa a ser a palavra 0).
  * - pc_write_i = 0 => o PC atual (a mesma palavra é registrada de novo).
  * - pc_write_i = 1 e pc_branch_i = 0 => PC + 4.
@@ -86,19 +89,20 @@ module search #(
 
     // Atribuições combinacionais de saída
     assign pc_o    = pc_reg;
-    assign pc_next = pc_reg + 32'd4;
     assign instr_o = instr_reg;
 
-    // Próximo PC. O reset entra aqui, e não só no registrador, para a instrução
-    // registrada também voltar à palavra do endereço 0.
-    always_comb begin
-        if (reset_i)
-            pc_sel = '0;
-        else if (pc_write_i)
-            pc_sel = pc_branch_i ? new_pc_i : pc_next;
-        else
-            pc_sel = pc_reg;
-    end
+    // Próximo PC (pc_sel) e PC + 4 (pc_next), calculados no submódulo next_pc.
+    next_pc #(
+        .XLEN(XLEN)
+    ) next_pc_inst (
+        .reset_i     (reset_i),
+        .pc_write_i  (pc_write_i),
+        .pc_branch_i (pc_branch_i),
+        .new_pc_i    (new_pc_i),
+        .pc_i        (pc_reg),
+        .pc_sel_o    (pc_sel),
+        .pc_next_o   (pc_next)
+    );
 
     // Atualização sequencial do Contador de Programa (PC) e da instrução, na
     // mesma borda.
