@@ -186,13 +186,13 @@ module tb_core;
     // ------------------------------------------------------------------
     function automatic logic [31:0] reg_val(logic [4:0] r);
         if (r == 0) return '0;
-        return dut.decoder_inst.register_file_inst.register_file[r];
+        return dut.register_file[r];
     endfunction
 
     function automatic logic [31:0] ram_word(logic [31:0] a);
         int w;
         w = a >> 2;
-        return dut.data_memory_inst.mem[w];
+        return dut.mem[w];
     endfunction
 
     task automatic fail(string msg);
@@ -417,10 +417,10 @@ module tb_core;
 
         // Espera o $readmemh inicial e sobrescreve as memorias.
         #1;
-        for (int i = 0; i < 1024; i++) dut.search_inst.instr_mem.mem[i] = NOP;
-        foreach (prog[i]) dut.search_inst.instr_mem.mem[i] = prog[i].instr;
-        for (int w = 0; w < $size(dut.data_memory_inst.mem); w++)
-            dut.data_memory_inst.mem[w] = 32'h0;
+        for (int i = 0; i < 1024; i++) dut.imem_mem[i] = NOP;
+        foreach (prog[i]) dut.imem_mem[i] = prog[i].instr;
+        for (int w = 0; w < $size(dut.mem); w++)
+            dut.mem[w] = 32'h0;
 
         // Reset sincrono por dois ciclos.
         repeat (2) @(posedge clk);

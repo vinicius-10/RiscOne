@@ -98,7 +98,7 @@ module tb_program;
             cycles++;
         end
 
-        a0 = dut.decoder_inst.register_file_inst.register_file[10];
+        a0 = dut.register_file[10];
         $display(" _halt em PC = 0x%08h apos %0d ciclos", dut.pc, cycles);
         $display(" a0 (retorno de main) = %0d | LEDs = 0x%04h", $signed(a0), io_out0_o[15:0]);
 
