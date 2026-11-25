@@ -42,3 +42,7 @@ build/
 
 # Artigos de referência (PDFs baixados e resumos; não versionar)
 artigos/
+
+#Arquivo de anotação sobre o projeto (não versionar)
+Notas.md
+

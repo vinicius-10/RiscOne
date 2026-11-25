@@ -57,13 +57,27 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-21 | x0_fisico / _max | placa | `register_file`: x0 no array (nasce 0, nunca escrito), leitura sem o mux de zero | -0,213 / +0,053 | 97,9 / 100,5 | 1162 / 1189 | 172 | 98 | 0 | **mantido**: −104 LUTs; no máximo todas as famílias iguais ou melhores. No padrão a família "RF sem RAM" cai 0,47 ns (caminho 82% rota) |
 | 2026-11-21 | cmp_funct3 / _max | placa | `execution`: comparador de desvio em cadeia única com o modo pelo `funct3` (porta `funct3_i`), decisão "toma se verdadeiro / se falso" e base do alvo sem `enable` | -0,256 / +0,050 | 97,5 / 100,5 | 1161 / 1163 | 172 | 98 | 0 | próximo PC melhora nos dois fluxos (+0,042 / +0,148); o pior passa a ser a flag de região → load → RF (−0,256 no padrão). Pior que o protótipo ac2, que só difere numa linha do `control_unit` (ver seção) |
 | 2026-11-21 | cmp_funct3_jalr / _max | placa | o mesmo + `control_unit`: JALR emite `OP_BIR` sem olhar o `funct3` (o enable continua estrito) — **estado atual** | **+0,091 / +0,141** | 100,9 / 101,4 | 1159 / 1176 | 172 | 98 | 0 | **mantido** (decisão do usuário): **fecha 100 MHz nos dois fluxos**, idêntico ao protótipo ac2. A linha só muda o netlist o bastante para outro placement (a estrutura é a mesma de `cmp_funct3`) |
-| 2026-11-24 | core_unico, core_plano, plano_a1..a4 (experimentos) | placa | o core inteiro num só módulo: em blocos `if (1)`, num só escopo, e com as seções reordenadas (branches próprias) | −0,143 / −0,224 | 98,6 / 97,8 | 1211 / 1198 | 172 | 99 | 0 | **pior** que o hierárquico; a ordem do código não muda nada. Ver seção "Experimentos de hierarquia" |
+| 2026-11-24 | core_unico, core_plano, plano_a1..a4 (experimentos) | placa | o core inteiro num só módulo: em blocos `if (1)`, num só escopo, e com as seções reordenadas (tags `exp/core_unico`, `exp/core_plano`, `exp/core_plano_a1`..`a4`) | −0,143 / −0,224 | 98,6 / 97,8 | 1211 / 1198 | 172 | 99 | 0 | **pior** que o hierárquico; a ordem do código não muda nada. Ver seção "Experimentos de hierarquia" |
 | 2026-11-25 | hier_selftest / _max | selftest | estado atual (`cmp_funct3_jalr`) com o programa selftest | −0,070 / +0,211 | 99,3 / 102,2 | 1156 / 1154 | 172 | 98 | 0 | referência para as variantes divididas |
-| 2026-11-25 | div_v1..div_v7 (experimentos) | selftest / placa | módulos divididos em submódulos (branches `hier_div_v1`..`v7`) | −0,293 a +0,049 | | 1150–1227 | 172 | 98 | 0 | só a ALU dividida muda a lógica (pior). O resto fica no ruído e não fica melhor de forma consistente. Ver seção "Experimentos de hierarquia" |
+| 2026-11-25 | div_v1..div_v7 (experimentos) | selftest / placa | módulos divididos em submódulos (tags `exp/hier_div_v1`..`v7`) | −0,293 a +0,049 | | 1150–1227 | 172 | 98 | 0 | só a ALU dividida muda a lógica (pior). O resto fica no ruído e não fica melhor de forma consistente. Ver seção "Experimentos de hierarquia" |
+| 2026-11-25 | pA, pB, pC, pB2 (protótipos) | placa | ideias tiradas dos artigos (cópias fora do repositório) | ver seção "Rodada de 25/11" | | | | | | melhor: **pB2** (+0,353 / +0,158, 1040 LUTs) |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Rodada de 25/11/2026 (ideias dos artigos, [REFERENCIAS_ARTIGOS.md](REFERENCIAS_ARTIGOS.md))
+
+Objetivo: folga além dos 100 MHz para funcionalidades futuras. Base `cmp_funct3_jalr` (+0,091 / +0,141, 1159 / 1176 LUTs). Protótipos fora do repositório, programa da placa, todos com `run_tb.ps1` passando (pB2: `tb_core` e `tb_program`, porque muda portas da `alu`/`execution`).
+
+| Tag | Mudança (artigo) | WNS padrão / máximo | LUTs | Conclusão |
+| :-- | :-- | --: | --: | :-- |
+| pA | saída da `alu` como OR de resultados mascarados por seletores one-hot (RVCoreP, Metzgen) | −0,101 / +0,049 | 1121 / 1138 | pior: a família da ALU ganha níveis (17 no padrão); o `case` já mapeava bem |
+| pB | um só deslocador à direita; no SLL a palavra entra e sai invertida, no SRA o preenchimento é `a[31]` (Pillmeier, Neto, Metzgen) | −0,047 / +0,212 | 1039 / 1061 | −120 LUTs; no máximo a família da ALU vai de +0,206 a +0,397. No padrão o pior vira instrução → seletor do B (fanout 65) → `b[4:0]` (fanout 85) → deslocador → RF |
+| pC | faixa/sinal aplicados à RAM e ao MMIO em separado, região e validade só no fim, com `keep` nas redes intermediárias (RVCoreP, XAPP522) | −0,092 / +0,131 | 1171 / 1182 | pior. Terceira tentativa no final do load (depois de `load_regiao_fim` e `ac2w`): abandonar essa alavanca |
+| **pB2** | pB + `shamt` direto da instrução: `instr[5] ? rs2[4:0] : instr[24:20]` (portas novas `alu.shamt_i`, `execution.op_reg_i`/`shamt_imm_i`) | **+0,353 / +0,158** | **1040 / 1053** | **ganha nos dois fluxos** e −119 LUTs. No padrão as famílias ficam empatadas em +0,35 (PC, load, ALU) |
+
+**Por que o pB2 funciona:** o deslocador deixa de esperar a decodificação do mux B (2–3 LUTs e fanout alto) e passa a ser configurado por fios da instrução, como o comparador de 21/11. Com um deslocador só, sobra área e o placement fica mais compacto.
 
 ## Rodada de 21/11/2026 (plano `docs/planos/2026-11-21-margem-100mhz.md`)
 
@@ -120,16 +134,16 @@ O comparador novo foi conferido contra um modelo de referência em 3,6 milhões 
 
 ## Experimentos de hierarquia (24–25/11/2026)
 
-Pergunta: a divisão em módulos muda o resultado? Todas as variantes partem de `cmp_funct3_jalr` e copiam o RTL sem mudar a lógica; todas passam nos 10 testbenches. Cada uma está commitada numa branch própria (não integrar; só registro), e os worktrees foram removidos.
+Pergunta: a divisão em módulos muda o resultado? Todas as variantes partem de `cmp_funct3_jalr` e copiam o RTL sem mudar a lógica; todas passam nos 10 testbenches. Cada uma está guardada num commit com a tag `exp/<nome>` (no GitHub; não integrar, só registro): `git checkout exp/hier_div_v1` recupera o código. As branches e os worktrees foram apagados.
 
 ### Menos hierarquia: tudo dentro do `core` (programa placa)
 
-| Branch | Variante | WNS (ns) | TNS (ns) / endpoints | LUTs | F7/F8 |
+| Tag | Variante | WNS (ns) | TNS (ns) / endpoints | LUTs | F7/F8 |
 | :-- | :-- | --: | --: | --: | --: |
 | — | hierárquico (`hier_paralelo`) | **+0,091** | 0 / 0 | 1159 | 143/32 |
-| `core_unico` | submódulos copiados para o `core.sv` em blocos `if (1) begin : nome` | −0,143 | −0,751 / 11 | 1211 | 188/32 |
-| `core_plano` | o mesmo num só escopo, sem os blocos (sinais renomeados) | −0,224 | −1,055 / 19 | 1198 | 188/32 |
-| `core_plano_a1`..`a4` | `core_plano` com as seções em 4 ordens diferentes no arquivo | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+| `exp/core_unico` | submódulos copiados para o `core.sv` em blocos `if (1) begin : nome` | −0,143 | −0,751 / 11 | 1211 | 188/32 |
+| `exp/core_plano` | o mesmo num só escopo, sem os blocos (sinais renomeados) | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+| `exp/core_plano_a1`..`a4` | `core_plano` com as seções em 4 ordens diferentes no arquivo | −0,224 | −1,055 / 19 | 1198 | 188/32 |
 
 - **A ordem do código não importa:** as 4 reordenações deram `util.rpt` idêntico e `timing.rpt` igual, exceto nomes de redes gerados pelo Vivado.
 - **A forma do código importa:** com blocos nomeados ou sem eles, o resultado muda (−0,143 × −0,224 ns).
@@ -139,16 +153,16 @@ Pergunta: a divisão em módulos muda o resultado? Todas as variantes partem de 
 
 WNS em ns (endpoints violando); LUTs entre parênteses. Referência refeita com o programa `selftest` (`hier_selftest`), porque as variantes usaram o padrão do script.
 
-| Branch | Divisão | selftest | selftest `-MaxEffort` | placa |
+| Tag | Divisão | selftest | selftest `-MaxEffort` | placa |
 | :-- | :-- | --: | --: | --: |
 | — | hierárquico (referência) | −0,070 (5) (1156) | +0,211 (1154) | +0,091 (1159) |
-| `hier_div_v1` | `execution` → `branch_comparator`, `branch_unit`, `mem_addr_unit` | +0,016 (1150) | +0,234 (1153) | −0,350 (19) (1168) |
-| `hier_div_v2` | `data_memory` → `mmio`, `load_align`, `store_align` | −0,097 (2) (1164) | | |
-| `hier_div_v3` | `alu` → `alu_arith`, `alu_logic`, `alu_shift` | **−0,293 (29) (1227)** | | |
-| `hier_div_v4` | `control_unit` → `main_decoder`, `alu_decoder` (equivalência conferida em 2^17 combinações) | −0,136 (14) (1156) | | |
-| `hier_div_v5` | `search` → `next_pc` (PC+4 e mux do próximo PC) | +0,049 (1161) | +0,219 (1164) | +0,028 (1167) |
-| `hier_div_v6` | V4 + V5 | −0,030 (1) (1153) | | |
-| `hier_div_v7` | V1 + V5 | −0,140 (4) (1155) | +0,095 (1168) | −0,082 (1) (1170) |
+| `exp/hier_div_v1` | `execution` → `branch_comparator`, `branch_unit`, `mem_addr_unit` | +0,016 (1150) | +0,234 (1153) | −0,350 (19) (1168) |
+| `exp/hier_div_v2` | `data_memory` → `mmio`, `load_align`, `store_align` | −0,097 (2) (1164) | | |
+| `exp/hier_div_v3` | `alu` → `alu_arith`, `alu_logic`, `alu_shift` | **−0,293 (29) (1227)** | | |
+| `exp/hier_div_v4` | `control_unit` → `main_decoder`, `alu_decoder` (equivalência conferida em 2^17 combinações) | −0,136 (14) (1156) | | |
+| `exp/hier_div_v5` | `search` → `next_pc` (PC+4 e mux do próximo PC) | +0,049 (1161) | +0,219 (1164) | +0,028 (1167) |
+| `exp/hier_div_v6` | V4 + V5 | −0,030 (1) (1153) | | |
+| `exp/hier_div_v7` | V1 + V5 | −0,140 (4) (1155) | +0,095 (1168) | −0,082 (1) (1170) |
 
 - **Só a ALU dividida muda a lógica:** são +71 LUTs e −0,29 ns, porque somador, lógica e shift deixam de compartilhar LUTs e o mux final fica de fora. A ALU fica num módulo só.
 - **As outras divisões ficam no ruído:**
