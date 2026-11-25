@@ -11,7 +11,7 @@
 // Tool Versions: vivado 2025.2
 // Description: Ula para realizar todos as instruções do conjunto rv32i
 // 
-// Dependencies: alu_pkg
+// Dependencies: alu_pkg, alu_arith, alu_logic, alu_shift
 // 
 // Revision:
 // Revision 0.01 - File Created
@@ -34,6 +34,10 @@
  * - comparação: SLT, SLTU;
  * - deslocamento: SLL, SRL, SRA;
  * - passagem: PASS_B.
+ *
+ * Submódulos: `alu_arith` (soma/subtração, SLT, SLTU), `alu_logic` (AND, OR,
+ * XOR, PASS_B) e `alu_shift` (SLL, SRL, SRA); a `alu` só escolhe o resultado
+ * final pelo `alu_op_i`.
  *
  * A ALU não decide desvios: a condição dos branches vem do comparador dedicado
  * da `execution`. Por isso `OP_CMP` (igualdade, usado só por BEQ/BNE) não é
@@ -59,52 +63,38 @@ module alu import alu_pkg::*; #(
     // --------------------------------------------------------
     // 1. Bloco Aritmético e Comparações (Compartilhamento CARRY4)
     // --------------------------------------------------------
-    logic            is_sub;
-    logic [XLEN-1:0] b_mux;
-    logic [XLEN:0]   add_sub_res; 
-
-    assign is_sub = (alu_op_i == OP_SUB)  |
-                    (alu_op_i == OP_SLT)  |
-                    (alu_op_i == OP_SLTU);
-    
-    assign b_mux  = is_sub ? ~b_i : b_i;
-    assign add_sub_res = a_i + b_mux + is_sub;
-
-    logic cmp_slt, cmp_sltu;
-
-    assign cmp_sltu = ~add_sub_res[XLEN];
-    assign cmp_slt  = (a_i[XLEN-1] != b_i[XLEN-1]) ? a_i[XLEN-1] : add_sub_res[XLEN-1];
-
     logic [XLEN-1:0] res_arith;
-    assign res_arith = (alu_op_i == OP_SLT)  ? {{(XLEN-1){1'b0}}, cmp_slt}  :
-                       (alu_op_i == OP_SLTU) ? {{(XLEN-1){1'b0}}, cmp_sltu} :
-                       add_sub_res[XLEN-1:0];
+
+    alu_arith #(.XLEN(XLEN)) alu_arith_inst (
+        .a_i         (a_i),
+        .b_i         (b_i),
+        .alu_op_i    (alu_op_i),
+        .res_arith_o (res_arith)
+    );
 
     // --------------------------------------------------------
     // 2. Bloco Lógico
     // --------------------------------------------------------
     logic [XLEN-1:0] res_logic;
-    always_comb begin
-        case (alu_op_i)
-            OP_AND:  res_logic = a_i & b_i;
-            OP_OR:   res_logic = a_i | b_i;
-            OP_XOR:  res_logic = a_i ^ b_i;
-            default: res_logic = b_i;
-        endcase
-    end
+
+    alu_logic #(.XLEN(XLEN)) alu_logic_inst (
+        .a_i         (a_i),
+        .b_i         (b_i),
+        .alu_op_i    (alu_op_i),
+        .res_logic_o (res_logic)
+    );
 
     // --------------------------------------------------------
     // 3. Bloco de Deslocamento (Barrel Shifter)
     // --------------------------------------------------------
     logic [XLEN-1:0] res_shift;
-    always_comb begin
-        case (alu_op_i)
-            OP_SLL:  res_shift = a_i << b_i[4:0];
-            OP_SRL:  res_shift = a_i >> b_i[4:0];
-            OP_SRA:  res_shift = $signed(a_i) >>> b_i[4:0];
-            default: res_shift = '0;
-        endcase
-    end
+
+    alu_shift #(.XLEN(XLEN)) alu_shift_inst (
+        .a_i         (a_i),
+        .b_i         (b_i),
+        .alu_op_i    (alu_op_i),
+        .res_shift_o (res_shift)
+    );
 
     // --------------------------------------------------------
     // 4. Multiplexador Final

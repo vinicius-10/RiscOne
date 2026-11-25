@@ -40,21 +40,21 @@ function Src([string]$tbDir, [string]$tb, [string[]]$dut) {
     @($dut | ForEach-Object { Join-Path $Rtl "$_.sv" }) + @(Join-Path $tbDir "$tb.sv")
 }
 $Tests = [ordered]@{
-    tb_alu               = Src $Sim   tb_alu               @('alu')
+    tb_alu               = Src $Sim   tb_alu               @('alu_arith', 'alu_logic', 'alu_shift', 'alu')
     tb_control_unit      = Src $Sim   tb_control_unit      @('control_unit')
     # Sistema completo: programa RV32I executado no core.
-    tb_core              = Src $Sim   tb_core              @('alu', 'control_unit', 'imm_gen', 'register_file',
+    tb_core              = Src $Sim   tb_core              @('alu_arith', 'alu_logic', 'alu_shift', 'alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',
                                                              'search', 'data_memory', 'write_back', 'core')
     tb_data_memory       = Src $Sim   tb_data_memory       @('data_memory')
     tb_decoder           = Src $Sim   tb_decoder           @('register_file', 'imm_gen', 'control_unit', 'decoder')
-    tb_execution         = Src $Sim   tb_execution         @('alu', 'execution')
+    tb_execution         = Src $Sim   tb_execution         @('alu_arith', 'alu_logic', 'alu_shift', 'alu', 'execution')
     # tb_instruction_fetch define seu proprio modelo de instruction_memory.
     tb_instruction_fetch = Src $Sim   tb_instruction_fetch @('search')
     tb_register_file     = Src $Sim   tb_register_file     @('register_file')
     tb_write_back        = Src $Sim   tb_write_back        @('write_back')
     # Programa C (sw/apps/selftest) compilado com riscv-gcc e executado no core.
-    tb_program           = Src $Sim   tb_program           @('alu', 'control_unit', 'imm_gen', 'register_file',
+    tb_program           = Src $Sim   tb_program           @('alu_arith', 'alu_logic', 'alu_shift', 'alu', 'control_unit', 'imm_gen', 'register_file',
                                                              'decoder', 'execution', 'instruction_memory',
                                                              'search', 'data_memory', 'write_back', 'core')
 }
