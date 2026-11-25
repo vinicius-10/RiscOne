@@ -61,7 +61,7 @@ if ($Compare) {
 # Ordem: packages antes dos modulos que os importam.
 $Pkgs = 'opcode_pkg', 'func3_pkg', 'func7_pkg', 'alu_pkg', 'branch_pkg', 'mem_pkg'
 $Mods = 'alu', 'control_unit', 'imm_gen', 'register_file', 'decoder', 'execution',
-        'instruction_memory', 'search', 'data_memory', 'write_back', 'core', 'top_core'
+        'instruction_memory', 'next_pc', 'search', 'data_memory', 'write_back', 'core', 'top_core'
 $Srcs = @($Pkgs + $Mods | ForEach-Object { (Join-Path $Rtl "$_.sv") -replace '\\', '/' })
 
 $FamTcl = (Join-Path $PSScriptRoot 'familias.tcl') -replace '\\', '/'
