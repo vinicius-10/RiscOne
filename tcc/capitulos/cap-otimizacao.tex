@@ -1,0 +1,194 @@
+\chapter{Otimização de \textit{timing} e de área}
+\label{cap:otimizacao}
+\textcolor{red}{[PENDENTE: parágrafo de abertura do capítulo]}
+
+\section{Metodologia}
+
+O processador foi sintetizado para o FPGA Artix-7 \texttt{xc7a100tcsg324-1}
+da placa Nexys A7-100T, com restrição de \textit{clock} de 100~MHz (período
+de 10~ns). As medições foram feitas no Vivado 2025.2, num fluxo em lote fixo
+composto por síntese (\texttt{synth\_design}), otimização lógica
+(\texttt{opt\_design}), posicionamento (\texttt{place\_design}) e roteamento
+(\texttt{route\_design}), todos com as diretivas padrão. Todos os valores
+são pós-roteamento. A métrica principal é a folga do pior caminho
+(\textit{Worst Negative Slack}, WNS). A partir dela, estima-se a frequência
+máxima de operação:
+\begin{equation}
+  F_{\max} = \frac{1}{T - \mathrm{WNS}},
+\end{equation}
+em que $T$ é o período da restrição. Um WNS negativo indica que o caminho
+crítico não cabe no período: com $\mathrm{WNS} = -4$~ns, por exemplo, o
+caminho leva 14~ns e $F_{\max} \approx 71{,}4$~MHz.
+
+Três cuidados garantiram que as comparações fossem válidas:
+\begin{itemize}
+  \item todas as medições de uma comparação usam o mesmo programa na memória
+    de instruções, já que o conteúdo dessa memória altera o circuito
+    sintetizado (Seção~\ref{sec:programa-teste}); a partir da segunda etapa,
+    o programa é o autoteste com as 37 instruções;
+  \item cada mudança de RTL só foi medida depois de passar por todos os
+    \textit{testbenches}, de modo que nenhuma otimização alterou o
+    comportamento do processador sem que isso fosse detectado;
+  \item foi alterada uma estrutura por vez, para que o efeito de cada
+    mudança pudesse ser isolado.
+  \item o fluxo é determinístico: a mesma entrada produz exatamente o mesmo
+    resultado. Porém, pequenas alterações no circuito mudam o posicionamento.
+    Dois circuitos com a mesma lógica e apenas duas LUTs de diferença
+    apresentaram WNS diferentes em 0,47~ns. Por isso, diferenças abaixo de
+    cerca de 0,5~ns foram consideradas variação de posicionamento, e não
+    efeito do RTL.
+\end{itemize}
+
+\section{Diagnóstico inicial}
+
+Na versão inicial, o processador atingia apenas 45,2~MHz
+($\mathrm{WNS} = -12{,}1$~ns). O caminho crítico ia do PC, passava pela
+memória de instruções, pela decodificação, pela ALU e pela memória de
+dados, e terminava na escrita do banco de registradores. Eram 18 níveis de
+lógica e 21,8~ns de atraso, dos quais 85\% correspondiam a roteamento, e não
+a lógica.
+
+O relatório de utilização apontou a causa: o circuito tinha 32.867
+\textit{flip-flops}, um número próximo dos 32.768 bits da memória de dados
+de 4~KiB. A memória não havia sido reconhecida como memória pela síntese e
+estava implementada com registradores comuns. Além do desperdício de área,
+o multiplexador de leitura de 1024 posições ficava espalhado pelo chip. Isso
+explica a predominância do roteamento no atraso.
+
+\section{Memória de dados como RAM distribuída}
+
+A memória de dados estava descrita como uma matriz bidimensional de bytes,
+com leitura combinacional e escrita por byte:
+
+\begin{lstlisting}
+logic [7:0] mem [0:MEM_DEPTH-1][0:3];   // 1024 palavras x 4 bytes
+\end{lstlisting}
+
+A síntese do Vivado só infere memória a partir de padrões de descrição
+específicos, e essa forma não era reconhecida. A memória foi reescrita como
+um vetor unidimensional de palavras de 32 bits, em que a escrita de cada byte
+é habilitada separadamente dentro de um único bloco síncrono, sem
+\textit{reset} e sem lógica adicional sobre o vetor:
+
+\begin{lstlisting}
+logic [31:0] mem [0:MEM_DEPTH-1];
+
+always_ff @(posedge clk)
+    if (ram_write_en)
+        for (int b = 0; b < 4; b++)
+            if (we_byte[b]) mem[word_addr][8*b +: 8] <= wdata[8*b +: 8];
+\end{lstlisting}
+
+O arquivo de inicialização continua com um byte por posição. Um bloco
+\texttt{initial} lê esse arquivo para um vetor temporário e monta cada palavra
+em ordem \textit{little-endian}, de forma que o formato dos arquivos gerados
+pelo compilador não mudou.
+
+Os blocos de BRAM do FPGA não foram usados porque têm leitura síncrona, com
+um ciclo de latência. Num processador monociclo, o dado lido precisa estar
+disponível no mesmo ciclo em que o endereço é calculado. Com a nova
+descrição, a memória passou a ser inferida como RAM distribuída (LUTRAM),
+implementada nas próprias LUTs do FPGA e com leitura assíncrona. O
+comportamento não mudou.
+
+O número de \textit{flip-flops} caiu de 32.867 para 99, e o de LUTs, de
+15.204 para 1.685 (redução de 89\%). A frequência estimada subiu de 45,2
+para 57,5~MHz (+27\%). O atraso do caminho crítico caiu para 17,1~ns, e o
+pior caminho passou a ser o de uma instrução de \textit{load} completa.
+
+\section{Somador dedicado para o endereço de memória}
+
+Na arquitetura original, o endereço dos acessos à memória
+($\mathit{rs1} + \mathit{imediato}$) era calculado pela própria ALU.
+Assim, o caminho de um \textit{load} passava pela decodificação do sinal que
+seleciona o segundo operando, pelo multiplexador desse operando, pelo
+somador da ALU e pelo multiplexador que escolhe a operação no resultado da
+ALU. Só então o endereço chegava à memória. Foi acrescentado à unidade de
+execução um somador exclusivo para o endereço, em paralelo à ALU e ligado
+diretamente à memória de dados:
+
+\begin{lstlisting}
+assign mem_addr_o = reg_data1_i + imm_i;   // somador dedicado, independe da ALU
+\end{lstlisting}
+
+O resultado da ALU continua indo para a etapa de \textit{write-back}, de
+forma que o comportamento das instruções não mudou. Com a decodificação do
+seletor e os dois multiplexadores fora do caminho crítico, o WNS passou de
+$-7{,}6$ para $-4{,}2$~ns, e a frequência estimada, de 56,7 para 70,4~MHz
+(+24\%). O custo foi de 117 LUTs.
+
+\section{Entradas e saídas genéricas}
+
+Na primeira versão, as saídas do MMIO podiam ser lidas de volta pelo software. A
+medição mostrou que isso piorava o WNS em 0,9~ns e acrescentava 96
+\textit{flip-flops}. Como o programa pode ler qualquer bit das saídas, a
+síntese não pode remover os bits que não estão ligados a nenhum pino. As
+saídas passaram então a ser somente de escrita, e a leitura desses
+endereços retorna zero. Nenhum dos programas lia as saídas. Com isso, a
+síntese descarta os bits sem pino: em relação à etapa anterior, o
+processador ficou com 125 LUTs e 32 \textit{flip-flops} a menos. O WNS
+medido, de $-4{,}7$~ns, está dentro da faixa de variação de posicionamento:
+uma variante com a mesma lógica obteve $-4{,}3$~ns.
+
+\section{Resultados}
+
+A Tabela~\ref{tab:otimizacao} resume a evolução. As duas primeiras linhas
+foram medidas com o programa \texttt{selftest} e as demais com o autoteste
+de 37 instruções. A linha de referência mede o mesmo RTL da etapa de
+LUTRAM com o novo programa e mostra que os dois programas são equivalentes
+para fins de medição.
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \caption{Evolução de \textit{timing} e área (pós-roteamento, restrição de 10~ns).}
+  \label{tab:otimizacao}
+  \begin{tabular}{@{}lrrrrrrr@{}}
+    \toprule
+    Etapa & WNS (ns) & $F_{\max}$ (MHz) & Atraso (ns) & Níveis & Rot. & LUTs & FFs \\
+    \midrule
+    Inicial                     & $-12{,}115$ & 45,2 & 21,8 & 18 & 85\% & 15.204 & 32.867 \\
+    Memória em LUTRAM           & $-7{,}391$  & 57,5 & 17,1 & 15 & 81\% & 1.685  & 99 \\
+    Referência (autoteste)      & $-7{,}625$  & 56,7 & 17,3 & 18 & 81\% & 1.684  & 99 \\
+    Somador dedicado            & $-4{,}207$  & 70,4 & 13,9 & 20 & 70\% & 1.801  & 99 \\
+    E/S com leitura de volta\textsuperscript{a} & $-5{,}083$ & 66,3 & 14,8 & 21 & 73\% & 1.798 & 195 \\
+    E/S genérica (final)        & $-4{,}724$  & 67,9 & 13,8 & 20 & 72\% & 1.676  & 67 \\
+    \bottomrule
+    \multicolumn{8}{@{}l}{\footnotesize \textsuperscript{a} Versão descartada.
+      Rot.: parcela do atraso devida a roteamento. LUTRAM: 556 LUTs em todas as
+      etapas após a segunda.}
+  \end{tabular}
+\end{table}
+
+Da versão inicial à final, a frequência máxima estimada subiu de 45,2 para
+cerca de 68--70~MHz, um ganho de aproximadamente 50\%. O atraso do caminho
+crítico caiu de 21,8 para 13,8~ns. A área caiu para 11\% das LUTs e 0,2\%
+dos \textit{flip-flops} iniciais. Esses valores são do fluxo fixo de
+medição. No fluxo padrão de implementação do projeto no Vivado, que inclui a
+etapa de otimização física (\texttt{phys\_opt\_design}), a versão com
+somador dedicado atingiu WNS de $-3{,}6$~ns, cerca de 73~MHz. O ganho veio
+principalmente da replicação dos registradores do PC, cuja saída alimenta
+cerca de 190 entradas.
+
+\section{Caminho crítico atual e limitações}
+
+O caminho crítico atual é o de uma instrução de \textit{load}, com 20 níveis
+de lógica e cerca de 70\% do atraso em roteamento. Na versão com somador
+dedicado, ele se dividia aproximadamente assim:
+\begin{itemize}
+  \item busca da instrução na memória de instruções (3,3~ns);
+  \item leitura do banco de registradores (2,3~ns);
+  \item soma do endereço, com propagação do \textit{carry} até o bit 31
+    (2,6~ns);
+  \item decodificação da região de memória (RAM ou E/S), que depende dos bits
+    mais altos do endereço (2,6~ns);
+  \item seleção e extensão do byte ou da meia palavra lida (2,0~ns);
+  \item \textit{write-back} e escrita no banco de registradores (1,2~ns).
+\end{itemize}
+
+Nenhuma dessas etapas é profunda isoladamente. O atraso vem de executar
+todas em série num único ciclo, o que é inerente à organização monociclo.
+Ajustes locais, como uma decodificação de região mais rasa ou opções de
+otimização da ferramenta, ainda podem render algumas frações de
+nanossegundo. Atingir os 100~MHz, porém, exige dividir esse caminho em
+estágios, como numa organização em \textit{pipeline}.

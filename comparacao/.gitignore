@@ -1,0 +1,15 @@
+*/repo/
+*/build/
+
+# Código de outros autores (não republicar; as mudanças estão descritas em cada NOTAS.md)
+**/patch/
+*/usuario_256/
+*/repo_head/
+01_asghar/src
+
+# Wrappers de medição (instanciam ou derivam do código dos autores; ficam só na cópia local)
+*/wrapper/
+
+# Instruções internas dos agentes da medição
+INSTRUCOES_AGENTES.md
+INSTRUCOES_DIFERENCAS.md
