@@ -52,10 +52,126 @@ Sempre compare runs com o **mesmo programa** (coluna Programa): a síntese otimi
 | 2026-11-04 | E4 (experimento) | placa | `(* max_fanout = 48 *)` no próximo PC (`pc_sel`, fanout 181 na ROM) | -0,160 | 98,4 | 1270 | 172 | 99 | 0 | ruído no padrão e **pior** no máximo (−0,178). Revertido |
 | 2026-11-04 | E3 (experimento) | placa | decisão de desvio mais rasa: um comparador "menor" (com sinal = sem sinal com o bit 31 invertido) e a decisão separada em "o que fazer se verdadeiro / se falso" | -0,234 | 97,7 | 1250 | 172 | 98 | 0 | igual no padrão e **pior** no máximo (−0,242); −16 LUTs. Revertido |
 | 2026-11-04 | P1 (protótipo) | placa | duas ROMs: lê PC+4 e o destino em paralelo e a decisão do desvio só escolhe a palavra | -0,390 | 96,2 | 1517 | 172 | 98 | 0 | o próximo PC sai do topo, mas a escrita do RF (AUIPC/JAL, load) piora com o design maior; máximo +0,032 (ruído). Não mantido |
+| 2026-11-21 | base_familias / _max | placa | RTL de `ir_search` com o relatório por família (`scripts/familias.tcl`) | -0,228 / +0,008 | 97,8 / 100,1 | 1266 / 1272 | 172 | 98 | 0 | repete `ir_search` exatamente; famílias na seção "Rodada de 21/11" |
+| 2026-11-21 | A, ac, ad, acd, ac2, ac2r, ac2m, ac2w, ac2s (protótipos) | placa | cópias fora do repositório (plano `docs/planos/2026-11-21-margem-100mhz.md`) | ver seção "Rodada de 21/11" | | | | | | melhor: ac2 (+0,091 / +0,141, 1159 LUTs) |
+| 2026-11-21 | x0_fisico / _max | placa | `register_file`: x0 no array (nasce 0, nunca escrito), leitura sem o mux de zero | -0,213 / +0,053 | 97,9 / 100,5 | 1162 / 1189 | 172 | 98 | 0 | **mantido**: −104 LUTs; no máximo todas as famílias iguais ou melhores. No padrão a família "RF sem RAM" cai 0,47 ns (caminho 82% rota) |
+| 2026-11-21 | cmp_funct3 / _max | placa | `execution`: comparador de desvio em cadeia única com o modo pelo `funct3` (porta `funct3_i`), decisão "toma se verdadeiro / se falso" e base do alvo sem `enable` | -0,256 / +0,050 | 97,5 / 100,5 | 1161 / 1163 | 172 | 98 | 0 | próximo PC melhora nos dois fluxos (+0,042 / +0,148); o pior passa a ser a flag de região → load → RF (−0,256 no padrão). Pior que o protótipo ac2, que só difere numa linha do `control_unit` (ver seção) |
+| 2026-11-21 | cmp_funct3_jalr / _max | placa | o mesmo + `control_unit`: JALR emite `OP_BIR` sem olhar o `funct3` (o enable continua estrito) — **estado atual** | **+0,091 / +0,141** | 100,9 / 101,4 | 1159 / 1176 | 172 | 98 | 0 | **mantido** (decisão do usuário): **fecha 100 MHz nos dois fluxos**, idêntico ao protótipo ac2. A linha só muda o netlist o bastante para outro placement (a estrutura é a mesma de `cmp_funct3`) |
+| 2026-11-24 | core_unico, core_plano, plano_a1..a4 (experimentos) | placa | o core inteiro num só módulo: em blocos `if (1)`, num só escopo, e com as seções reordenadas (tags `exp/core_unico`, `exp/core_plano`, `exp/core_plano_a1`..`a4`) | −0,143 / −0,224 | 98,6 / 97,8 | 1211 / 1198 | 172 | 99 | 0 | **pior** que o hierárquico; a ordem do código não muda nada. Ver seção "Experimentos de hierarquia" |
+| 2026-11-25 | hier_selftest / _max | selftest | estado atual (`cmp_funct3_jalr`) com o programa selftest | −0,070 / +0,211 | 99,3 / 102,2 | 1156 / 1154 | 172 | 98 | 0 | referência para as variantes divididas |
+| 2026-11-25 | div_v1..div_v7 (experimentos) | selftest / placa | módulos divididos em submódulos (tags `exp/hier_div_v1`..`v7`) | −0,293 a +0,049 | | 1150–1227 | 172 | 98 | 0 | só a ALU dividida muda a lógica (pior). O resto fica no ruído e não fica melhor de forma consistente. Ver seção "Experimentos de hierarquia" |
+| 2026-11-25 | pA, pB, pC, pB2 (protótipos) | placa | ideias tiradas dos artigos (cópias fora do repositório) | ver seção "Rodada de 25/11" | | | | | | melhor: **pB2** (+0,353 / +0,158, 1040 LUTs) |
 
 **Ruído de placement (03/11/2026):** o fluxo é determinístico para a mesma entrada (`base_mmio` = `addr_dedicado`), mas netlists quase iguais (`mmio_sem_leitura` × `mmio_somente_escrita`, 2 LUTs de diferença) deram WNS 0,47 ns diferentes. Diferenças de WNS abaixo de ~0,5 ns não provam melhora ou piora de RTL.
 
 **Conclusão da comparação com `a94a053`:** a diferença entre o "≈ -4,6 ns" e o "-12,1 ns" vem do **programa** (placa × selftest), não do commit. Com o mesmo programa, `ff61b04` × `a94a053` dá −11,8 × −12,1 (selftest) e −4,7 × −5,4 (placa): ambas dentro da variação de placement de um design dominado pela RAM em FFs. Não foi revertido (`a94a053` traz decodificação estrita e escrita por faixa de byte no MMIO, que são funcionais).
+
+## Rodada de 25/11/2026 (ideias dos artigos, [REFERENCIAS_ARTIGOS.md](REFERENCIAS_ARTIGOS.md))
+
+Objetivo: folga além dos 100 MHz para funcionalidades futuras. Base `cmp_funct3_jalr` (+0,091 / +0,141, 1159 / 1176 LUTs). Protótipos fora do repositório, programa da placa, todos com `run_tb.ps1` passando (pB2: `tb_core` e `tb_program`, porque muda portas da `alu`/`execution`).
+
+| Tag | Mudança (artigo) | WNS padrão / máximo | LUTs | Conclusão |
+| :-- | :-- | --: | --: | :-- |
+| pA | saída da `alu` como OR de resultados mascarados por seletores one-hot (RVCoreP, Metzgen) | −0,101 / +0,049 | 1121 / 1138 | pior: a família da ALU ganha níveis (17 no padrão); o `case` já mapeava bem |
+| pB | um só deslocador à direita; no SLL a palavra entra e sai invertida, no SRA o preenchimento é `a[31]` (Pillmeier, Neto, Metzgen) | −0,047 / +0,212 | 1039 / 1061 | −120 LUTs; no máximo a família da ALU vai de +0,206 a +0,397. No padrão o pior vira instrução → seletor do B (fanout 65) → `b[4:0]` (fanout 85) → deslocador → RF |
+| pC | faixa/sinal aplicados à RAM e ao MMIO em separado, região e validade só no fim, com `keep` nas redes intermediárias (RVCoreP, XAPP522) | −0,092 / +0,131 | 1171 / 1182 | pior. Terceira tentativa no final do load (depois de `load_regiao_fim` e `ac2w`): abandonar essa alavanca |
+| **pB2** | pB + `shamt` direto da instrução: `instr[5] ? rs2[4:0] : instr[24:20]` (portas novas `alu.shamt_i`, `execution.op_reg_i`/`shamt_imm_i`) | **+0,353 / +0,158** | **1040 / 1053** | **ganha nos dois fluxos** e −119 LUTs. No padrão as famílias ficam empatadas em +0,35 (PC, load, ALU) |
+
+**Por que o pB2 funciona:** o deslocador deixa de esperar a decodificação do mux B (2–3 LUTs e fanout alto) e passa a ser configurado por fios da instrução, como o comparador de 21/11. Com um deslocador só, sobra área e o placement fica mais compacto.
+
+## Rodada de 21/11/2026 (plano `docs/planos/2026-11-21-margem-100mhz.md`)
+
+Ponto de partida: `ir_search` (−0,228 / +0,008), com as famílias empatadas a ~0,1 ns. Método novo: `scripts/familias.tcl`, chamado pelo `synth.ps1`, mede a pior folga de cada família (`familias.txt` e a tabela no `resumo.txt`). Os candidatos foram ranqueados em protótipos fora do repositório; só os que ganharam nos dois fluxos entraram no projeto.
+
+### Protótipos (WNS padrão / máximo, em ns; mudanças cumulativas)
+
+| Tag | Mudança | WNS | LUTs | Conclusão |
+| :-- | :-- | --: | --: | :-- |
+| A | x0 no array do banco, sem o mux de zero na leitura | −0,213 / +0,053 | 1162 | entra: −104 LUTs, uma LUT a menos em todo caminho que lê o banco, fanout dos campos `rs1`/`rs2` de 69 para 34 |
+| ac | A + comparador em cadeia única com o modo vindo do `alu_control` | −0,547 / — | 1172 | pior: a decodificação do `alu_control` (3 LUTs + MUXF7) ficou em série com a cadeia |
+| ad | A + decodificação rasa (seletores A/B, imediato, `alu_control`) | −0,371 / — | 1223 | pior; +61 LUTs |
+| acd | ac + ad | −0,481 / +0,018 | 1203 | pior |
+| **ac2** | A + comparador em cadeia única com o modo pelo `funct3` + base do alvo sem `enable` (+ JALR com `OP_BIR` sem `funct3`) | **+0,091 / +0,141** | 1159 | **entra**: o próximo PC sai do topo |
+| ac2r | ac2 + reset nos pinos S/R dos FFs, fora do mux do próximo PC | +0,016 / +0,163 | 1166 | ruído (o próximo PC já tem folga) |
+| ac2m | ac2 + imediato dedicado ao endereço de load/store | −0,162 / +0,110 | 1128 | o imediato sai do caminho do load, mas o WNS não melhora; só o store ganha (+0,8 ns) |
+| ac2w | ac2 + leitura da `data_memory` reorganizada (faixa/sinal direto na palavra da RAM, RAM × MMIO por último) | +0,008 / +0,092 | 1158 | sem ganho: o Vivado funde o mux final da ALU na LUT do write-back e a escolha RAM × MMIO continua numa LUT separada (4 LUTs depois da RAM) |
+| ac2s | ac2 + `shamt` dedicado + seletores A/B rasos | −0,127 / +0,047 | 1187 | melhora o deslocamento no máximo, mas o load piora |
+
+O comparador novo foi conferido contra um modelo de referência em 3,6 milhões de casos, e o `tb_execution` ganhou os testes 59 (4000 vetores aleatórios) e 60 (pares de bordas × 6 desvios).
+
+### Folga por família (padrão / máximo)
+
+| Família | base (`ir_search`) | x0_fisico | cmp_funct3_jalr |
+| :-- | --: | --: | --: |
+| próximo PC | −0,228 / +0,008 | −0,150 / +0,053 | +0,201 / +0,278 |
+| escrita no RF via RAM de dados (load) | +0,175 / +0,026 | +0,192 / +0,327 | +0,184 / +0,141 |
+| escrita no RF sem a RAM (ALU, deslocamento, flag de região) | +0,257 / +0,039 | −0,213 / +0,092 | +0,091 / +0,206 |
+| store | +0,656 / +0,448 | +0,555 / +0,840 | +0,258 / +0,708 |
+| saídas MMIO | +1,980 / +1,666 | +2,505 / +2,297 | +1,298 / +1,772 |
+
+- **Esforço máximo:** todas as famílias melhoram.
+- **Fluxo padrão:** store e MMIO perdem folga, mas continuam longe do pior.
+
+### Por que funcionou
+
+- **x0 físico:** o mux `rs == 0 ? 0 : RAM` era uma LUT6 por bit (dado + 5 bits do endereço) logo depois da LUTRAM, no começo do load, da ALU, do JALR e da flag de região. Também pendurava 32 cargas em cada bit dos campos `rs1`/`rs2` da instrução. Sozinho não move o WNS do padrão (lá a família "RF sem RAM", 82% rota, piorou 0,47 ns), mas libera as famílias para o comparador render.
+- **Comparador:** antes eram 3 comparações em paralelo, escolhidas depois pelo `alu_control`, e depois a decisão: 3 LUTs entre a cadeia e a ROM. Agora:
+  - uma cadeia só, configurada pelo `funct3`, que é fio da instrução: dígitos de 2 bits, carry de `lt + (lt ^ eq) + cin`; com sinal = bit 31 invertido;
+  - a decisão pré-calculada (o que fazer com a comparação verdadeira e com a falsa).
+
+  Sobra 1 LUT até o mux do próximo PC.
+- **Lição:** configurar a cadeia pelo `alu_control` (protótipo ac) piorou, porque um seletor decodificado na frente de uma cadeia de carry entra em série com ela.
+- **Linha do JALR:** sem ela (`cmp_funct3`), o mesmo RTL estrutural deu −0,256 / +0,050. A diferença é de placement: a linha muda o netlist em ~2 LUTs. O resultado com a linha é determinístico no script; o run da GUI pode variar.
+
+### O que limita agora (+0,09 / +0,14 ns)
+
+- **Flag de região → load → RF** (padrão): rs1 → carry de 12 bits → flag MMIO/página → escolha RAM × MMIO → faixa/sinal → write-back, 77% rota.
+- **Load** (máximo): rs1 → somador → RAM de dados (fanout 138) → 4 LUTs → RF.
+- **Próximas alavancas** (não medidas nesta rodada):
+  - seletor de write-back de 2 bits codificado no controle, para a escolha RAM × MMIO e o mux da ALU caberem na última LUT;
+  - AUIPC pelo somador do alvo e `PC+4` direto no write-back. Isso tira o mux A da ALU e a 3ª entrada do B;
+  - duplicar o somador do endereço para dividir o fanout de 138.
+
+## Experimentos de hierarquia (24–25/11/2026)
+
+Pergunta: a divisão em módulos muda o resultado? Todas as variantes partem de `cmp_funct3_jalr` e copiam o RTL sem mudar a lógica; todas passam nos 10 testbenches. Cada uma está guardada num commit com a tag `exp/<nome>` (no GitHub; não integrar, só registro): `git checkout exp/hier_div_v1` recupera o código. As branches e os worktrees foram apagados.
+
+### Menos hierarquia: tudo dentro do `core` (programa placa)
+
+| Tag | Variante | WNS (ns) | TNS (ns) / endpoints | LUTs | F7/F8 |
+| :-- | :-- | --: | --: | --: | --: |
+| — | hierárquico (`hier_paralelo`) | **+0,091** | 0 / 0 | 1159 | 143/32 |
+| `exp/core_unico` | submódulos copiados para o `core.sv` em blocos `if (1) begin : nome` | −0,143 | −0,751 / 11 | 1211 | 188/32 |
+| `exp/core_plano` | o mesmo num só escopo, sem os blocos (sinais renomeados) | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+| `exp/core_plano_a1`..`a4` | `core_plano` com as seções em 4 ordens diferentes no arquivo | −0,224 | −1,055 / 19 | 1198 | 188/32 |
+
+- **A ordem do código não importa:** as 4 reordenações deram `util.rpt` idêntico e `timing.rpt` igual, exceto nomes de redes gerados pelo Vivado.
+- **A forma do código importa:** com blocos nomeados ou sem eles, o resultado muda (−0,143 × −0,224 ns).
+- **Achatar piora:** sem as fronteiras de módulo, a síntese junta lógica de blocos vizinhos (+45 F7, +40–50 LUTs) e o timing piora ~0,3 ns.
+
+### Mais hierarquia: submódulos novos
+
+WNS em ns (endpoints violando); LUTs entre parênteses. Referência refeita com o programa `selftest` (`hier_selftest`), porque as variantes usaram o padrão do script.
+
+| Tag | Divisão | selftest | selftest `-MaxEffort` | placa |
+| :-- | :-- | --: | --: | --: |
+| — | hierárquico (referência) | −0,070 (5) (1156) | +0,211 (1154) | +0,091 (1159) |
+| `exp/hier_div_v1` | `execution` → `branch_comparator`, `branch_unit`, `mem_addr_unit` | +0,016 (1150) | +0,234 (1153) | −0,350 (19) (1168) |
+| `exp/hier_div_v2` | `data_memory` → `mmio`, `load_align`, `store_align` | −0,097 (2) (1164) | | |
+| `exp/hier_div_v3` | `alu` → `alu_arith`, `alu_logic`, `alu_shift` | **−0,293 (29) (1227)** | | |
+| `exp/hier_div_v4` | `control_unit` → `main_decoder`, `alu_decoder` (equivalência conferida em 2^17 combinações) | −0,136 (14) (1156) | | |
+| `exp/hier_div_v5` | `search` → `next_pc` (PC+4 e mux do próximo PC) | +0,049 (1161) | +0,219 (1164) | +0,028 (1167) |
+| `exp/hier_div_v6` | V4 + V5 | −0,030 (1) (1153) | | |
+| `exp/hier_div_v7` | V1 + V5 | −0,140 (4) (1155) | +0,095 (1168) | −0,082 (1) (1170) |
+
+- **Só a ALU dividida muda a lógica:** são +71 LUTs e −0,29 ns, porque somador, lógica e shift deixam de compartilhar LUTs e o mux final fica de fora. A ALU fica num módulo só.
+- **As outras divisões ficam no ruído:**
+  - a área quase não muda (±15 LUTs) e o F7/F8 fica igual;
+  - a ordem entre as variantes troca de programa para programa (V1 é a melhor no selftest e a pior na placa);
+  - com `-MaxEffort`, hierárquico, V1 e V5 empatam (+0,21 a +0,23 ns);
+  - V7 (V1 + V5) foi pior que cada uma separada.
+- **Conclusão:** a hierarquia atual já está boa. Achatar piora, e dividir mais não ajuda no timing. Divisões como a V1 só valeriam pela organização do código.
+- **Referência com o selftest:** o estado atual dá −0,070 ns com o selftest e +0,091 ns com o programa da placa. Compare sempre com o mesmo programa.
 
 ## Diagnóstico após `ir_search` (04/11/2026)
 

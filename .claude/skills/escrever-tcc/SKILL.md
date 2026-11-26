@@ -26,12 +26,12 @@ Se o texto discorda do RTL, o RTL vence. Se a informação não existe em nenhum
 
 Armadilhas recorrentes do rascunho (conferir sempre que o assunto aparecer):
 - São **37** instruções executadas; ECALL, EBREAK e FENCE viram NOP, sem trap.
-- BEQ/BNE não usam flag de zero: usam `OP_CMP`, e o desvio lê o **bit 0** do resultado (`alu_lsb_o`). Relacionais usam `OP_SLT`/`OP_SLTU`.
+- Desvios condicionais não passam pela ALU nem usam flag: um **comparador dedicado** na `execution` compara rs1 com rs2 direto, numa única cadeia de *carry*, e a comparação é escolhida pelo `funct3` da instrução (`funct3[2]` = 0 igualdade BEQ/BNE, 1 "menor"; `funct3[1]` = 1 sem sinal BLTU/BGEU). `OP_BCT` desvia com a comparação verdadeira, `OP_BCF` com ela falsa. O `alu_op_t` que a CU ainda emite nos desvios (`OP_CMP`/`OP_SLT`/`OP_SLTU`) não é usado, e a ALU devolve 0 para `OP_CMP`.
 - Entrada A da ALU: rs1 ou PC. Entrada B: rs2, imediato ou PC+4 (JAL/JALR gravam PC+4 via `OP_PASS_B`). O imediato já sai pronto do `imm_gen` (não é deslocado na execução).
 - Endereço da memória de dados vem de um somador dedicado (rs1 + imm), não da ALU.
 - Memória de dados: vetor 1-D de palavras de 32 bits inferido como LUTRAM (a matriz 2-D de bytes é a versão antiga).
 - MMIO genérico: 4 saídas somente-escrita (`0x4000_0000`–`0x0C`) e 4 entradas (`0x4000_0010`–`0x1C`); o `top_core` liga às chaves, LEDs, botões, 7 segmentos e PMOD.
-- Reset síncrono zera só o PC.
+- Reset síncrono força o próximo PC a 0: o PC e a instrução registrada no `search` recomeçam do endereço 0. Banco de registradores e RAM não são zerados.
 
 ## 2. Modo revisão (padrão quando o usuário pede para revisar/corrigir)
 

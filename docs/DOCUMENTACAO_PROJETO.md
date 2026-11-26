@@ -84,9 +84,9 @@ top_core (interface dos pinos da Nexys A7)
 | `instruction_memory` | Armazena palavras de instrução e faz leitura combinacional do índice derivado do endereço (o próximo PC). |
 | `decoder` | Extrai `rd`, `rs1`, `rs2`; integra banco, imediato e unidade de controle. |
 | `control_unit` | Decodifica opcode/funct3/funct7 e gera controles do datapath. |
-| `register_file` | Implementa `x1`–`x31`, leituras combinacionais, escrita síncrona e `x0` constante. |
+| `register_file` | Implementa `x0`–`x31` (`x0` nasce zero e nunca é escrito), leituras combinacionais direto do array e escrita síncrona. |
 | `imm_gen` | Reconstrói e estende imediatos I, S, B, U e J. |
-| `execution` | Seleciona operandos, aciona ALU, calcula o endereço de branch ou salto e decide os branches com um comparador dedicado (`rs1` × `rs2`). |
+| `execution` | Seleciona operandos, aciona ALU, calcula o endereço de branch ou salto e decide os branches com um comparador dedicado (`rs1` × `rs2`), escolhido pelo `funct3`. |
 | `alu` | Aritmética, lógica, comparação (SLT/SLTU), deslocamento e passagem de B. |
 | `data_memory` | RAM byte-addressable, loads/stores e periféricos mapeados em memória. |
 | `write_back` | Seleciona resultado da ALU ou dado lido da memória. |
@@ -118,13 +118,13 @@ ciclo:  [instr] --> control_unit --> sinais de controle
 | I aritm. (`addi`…`srai`) | rs1 | imm I | conforme funct3/imm[11:5] | — | resultado da ALU | PC+4 |
 | Load (`lb`…`lhu`) | rs1 | imm I | ADD (endereço) | lê, largura/sinal por funct3 | dado da memória | PC+4 |
 | Store (`sb`/`sh`/`sw`) | rs1 | imm S | ADD (endereço) | escreve rs2 (byte enables) | — | PC+4 |
-| Branch (`beq`…`bgeu`) | rs1 | rs2 | CMP / SLT / SLTU (escolhe a comparação) | — | — | PC+imm B se condição, senão PC+4 |
+| Branch (`beq`…`bgeu`) | rs1 | rs2 | — (a comparação vem do `funct3`) | — | — | PC+imm B se condição, senão PC+4 |
 | `lui` | — | imm U | PASS_B | — | imm U | PC+4 |
 | `auipc` | PC | imm U | ADD | — | PC + imm U | PC+4 |
 | `jal` | — | PC+4 | PASS_B | — | PC+4 | PC + imm J |
 | `jalr` | — | PC+4 | PASS_B | — | PC+4 | (rs1 + imm I) & ~1 |
 
-Nos branches, a condição vem do comparador dedicado da `execution`, que compara `rs1` com `rs2` direto (a ALU não participa). A operação (CMP / SLT / SLTU) só escolhe a comparação: igualdade, menor com sinal ou menor sem sinal. `OP_BCT` desvia com a comparação verdadeira e `OP_BCF` com ela falsa. Assim `beq`=CMP/BCT, `bne`=CMP/BCF, `blt`=SLT/BCT, `bge`=SLT/BCF, `bltu`=SLTU/BCT, `bgeu`=SLTU/BCF.
+Nos branches, a condição vem do comparador dedicado da `execution`, que compara `rs1` com `rs2` direto (a ALU não participa). O `funct3` da instrução escolhe a comparação: igualdade (`000`/`001`), menor com sinal (`100`/`101`) ou menor sem sinal (`110`/`111`). `OP_BCT` desvia com a comparação verdadeira e `OP_BCF` com ela falsa. Assim `beq` = igual/BCT, `bne` = igual/BCF, `blt` = menor com sinal/BCT, `bge` = menor com sinal/BCF, `bltu` = menor sem sinal/BCT, `bgeu` = menor sem sinal/BCF. O `control_unit` continua emitindo `OP_CMP`/`OP_SLT`/`OP_SLTU` no `alu_op_t` dos branches, sem uso no datapath.
 
 ### 3.3 Tabela de controle (`control_unit`)
 
@@ -136,14 +136,14 @@ Estas são decisões que podem ser observadas na implementação atual; não há
 
 1. **Implementação monociclo:** etapas funcionais estão ligadas em um ciclo, com estado atualizado na borda de subida.
 2. **Separação em módulos e packages:** enums de opcode, ALU, branch e memória são centralizados em packages SystemVerilog.
-3. **`x0` constante sem célula física:** o array armazena apenas `x1`–`x31`.
+3. **`x0` com célula física (21/11/2026):** `x0` ocupa a posição 0 do array, nasce zero pelo `initial` e nunca é escrito (a escrita com `rd = 0` continua bloqueada). A leitura sai direto da LUTRAM, sem o mux de zero que custava uma LUT no começo de todo caminho que lê o banco (ver `docs/TIMING.md`). Antes, o array guardava só `x1`–`x31`.
 4. **Reset limitado ao PC:** o reset leva o próximo PC a 0, e com ele o PC e a instrução registrada voltam ao endereço 0. Banco, RAM e saídas MMIO não são limpos pelo reset; banco e periféricos têm inicialização `initial` em zero.
 5. **Memórias inicializadas por arquivo hexadecimal:** `$readmemh` e parâmetros de caminho permitem trocar as imagens.
 6. **MMIO dentro da memória de dados:** periféricos compartilham o caminho de load/store através de decodificação de endereço.
 7. **Falha de decode sem trap:** instrução não suportada recebe controles padrão e fluxo segue.
 8. **Alinhamento de instrução:** instruções são palavras de 32 bits, indexadas com os bits `[1:0]` descartados.
 9. **Instrução registrada com o próximo PC (04/11/2026):** a ROM é lida com o próximo PC e a instrução fica num registrador do `search`, atualizado na mesma borda que o PC. Continua monociclo; a leitura da ROM sai do início de todos os caminhos de timing. O registrador fica no `search`, e não dentro da `instruction_memory`, porque dentro dela o Vivado só evitava a BRAM com `rom_style = "distributed"`, que deu ~0,5 ns pior.
-10. **Comparador de desvio dedicado (04/11/2026):** os branches comparam `rs1` com `rs2` direto na `execution`, sem os muxes de operando nem a ALU. O próximo PC deixa de esperar a decodificação da operação da ALU.
+10. **Comparador de desvio dedicado (04/11/2026):** os branches comparam `rs1` com `rs2` direto na `execution`, sem os muxes de operando nem a ALU. O próximo PC deixa de esperar a decodificação da operação da ALU. Em 21/11/2026 virou uma cadeia de carry só, com a comparação escolhida pelo `funct3` (fio da instrução, sem decodificação) e a decisão pré-calculada (o que fazer com a comparação verdadeira e com a falsa).
 11. **RAM de dados de 1 KiB (04/11/2026):** a RAM tem 256 palavras, contra 1024 da memória de instruções. Isso reduz o fanout do endereço e tira o mux das 4 faixas de LUTRAM do caminho do load.
 
 ## 5. Organização dos arquivos
@@ -209,12 +209,12 @@ Por enquanto **não serão implementados** traps nem tratamento de desalinhament
 
 ### 8.2 Resolvidas
 
-1. **Flag `alu_lsb_o` (antes `zero_o`):** era `alu_o[0]`, não uma flag de resultado zero, e servia de condição dos branches. Em 04/11/2026 a condição passou para um comparador dedicado na `execution` (`rs1` × `rs2`, escolhido pelo `alu_op_t` do branch). A porta saiu da ALU, junto com o cálculo do `OP_CMP`.
+1. **Flag `alu_lsb_o` (antes `zero_o`):** era `alu_o[0]`, não uma flag de resultado zero, e servia de condição dos branches. Em 04/11/2026 a condição passou para um comparador dedicado na `execution` (`rs1` × `rs2`, escolhido pelo `alu_op_t` do branch; desde 21/11/2026, pelo `funct3`). A porta saiu da ALU, junto com o cálculo do `OP_CMP`.
 2. **`SLTU`:** `~carry` de `a + ~b + 1` está correto; coberto por `tb_alu` e `tb_core`.
 3. **Faixa da RAM:** vale `addr_i < MEM_DEPTH * 4`, ou seja, até `0x03FF` com a RAM de 1 KiB do core; o comentário do `data_memory` foi corrigido.
 4. **Loads/stores MMIO parciais:** byte/halfword em MMIO usam as mesmas lanes e extensão de sinal da RAM (seção 2.3).
 5. **Caminhos de memória:** os `.mem` ficam só em `sources_1/imports/new/`; o `$readmemh` resolve caminhos relativos ao diretório de execução.
-6. **Reset/estado inicial:** `x1`–`x31` começam em zero por `initial`; o reset leva o próximo PC a 0 (PC = 0 e instrução registrada = palavra 0). Na carga do FPGA, a instrução registrada já nasce com a palavra 0.
+6. **Reset/estado inicial:** `x0`–`x31` começam em zero por `initial` (`x0` nunca é escrito); o reset leva o próximo PC a 0 (PC = 0 e instrução registrada = palavra 0). Na carga do FPGA, a instrução registrada já nasce com a palavra 0.
 
 ## 9. Referência de manutenção
 

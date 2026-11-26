@@ -157,6 +157,7 @@ module core #(
         .branch_enable_i (branch_enable),
         .control_alu_a   (alu_a_select),
         .control_alu_b   (alu_b_select),
+        .funct3_i        (instruction[14:12]),   // escolhe a comparação dos desvios
         .pc_branch_o     (pc_branch),
         .alu_result_o    (alu_result),
         .branch_taken_o  (branch_taken),

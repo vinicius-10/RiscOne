@@ -27,7 +27,7 @@ Alvo padrão: `xc7a100tcsg324-1`, clock de **100 MHz** (`create_clock -period 10
 ```
 (sempre via `powershell -ExecutionPolicy Bypass -File ...`)
 
-Em `build/synth/<tag>/`: `resumo.txt` (WNS, TNS, Fmax estimada, área, latches, 5 piores caminhos), `timing.rpt` (detalhe célula a célula dos 10 piores), `paths.rpt` (20 caminhos em tabela), `util_hier.rpt` (área por módulo), `methodology.rpt` (regras de boas práticas do Vivado; resumidas no `resumo.txt`), `vivado.log`.
+Em `build/synth/<tag>/`: `resumo.txt` (WNS, TNS, Fmax estimada, área, latches, 5 piores caminhos e a pior folga por família), `familias.txt` / `familias_det.txt` (pior caminho de cada família — próximo PC com/sem leitura do RF, escrita no RF via RAM de dados ou não, store, MMIO — em uma linha e em detalhe; gerados por `scripts/familias.tcl`), `timing.rpt` (detalhe célula a célula dos 10 piores), `paths.rpt` (20 caminhos em tabela), `util_hier.rpt` (área por módulo), `methodology.rpt` (regras de boas práticas do Vivado; resumidas no `resumo.txt`), `vivado.log`.
 
 Avisos de methodology esperados neste projeto (não são o gargalo): `TIMING-18` (sem `set_input/output_delay` nos pinos de chaves/LEDs/botões, assíncronos por natureza), `HPDR-1` (direção dos pinos `JA` inout do PMOD) e `TIMING-16` (consequência do WNS negativo). `ULMTCS-2` (control sets demais) vem dos ~32 mil FFs da `data_memory` e deve sumir quando ela virar RAM.
 
@@ -78,6 +78,9 @@ Caminho típico de um monociclo (todos combinacionais em série num ciclo):
 
 - Área pós-síntese é praticamente determinística para o mesmo RTL; diferenças pequenas (dezenas de LUTs) podem ser ruído do otimizador.
 - Timing pós-roteamento varia com o placement: diferenças de WNS abaixo de ~0,5 ns não provam nada (medido em 03/11/2026: dois netlists com 2 LUTs de diferença deram 0,47 ns de diferença). Rodar de novo a mesma entrada dá o mesmo resultado (o fluxo é determinístico), então não serve como teste de ruído; compare o número de níveis e o atraso de lógica do caminho.
+- **Compare as famílias, não só o WNS.** Quando as famílias estão empatadas, uma mudança que encurta uma delas não move o WNS. Exemplo de 21/11/2026: o x0 físico deu o mesmo WNS no fluxo padrão, mas melhorou todas as famílias no esforço máximo e foi o que permitiu o comparador novo render. Leia o `familias.txt` dos dois fluxos (padrão e `-MaxEffort`).
+- **Protótipo fora do repositório:** para ranquear várias ideias sem mexer no projeto, copie `scripts/`, `sw/` e `processador_riscV.srcs/` para uma pasta de rascunho e rode o `synth.ps1` da cópia (ele usa a pasta pai do script como raiz). Vários runs em paralelo cabem na máquina (~2 GB cada).
+- **Decodificação em série:** um seletor que vem do `control_unit` (ex.: `alu_control`) tem 2–3 níveis de LUT. Se ele configurar algo *antes* de uma cadeia de carry, entra em série com ela. Prefira bits da própria instrução (`funct3`) para configurar e deixe os sinais decodificados para o fim do caminho.
 - WHS (hold) negativo pós-roteamento é problema real; pós-síntese pode ser ignorado.
 - Latches inferidos (`Synth 8-327`) são bug de RTL combinacional (atribuição faltando em algum ramo): sempre relatar ao usuário.
 

@@ -39,9 +39,9 @@ top_core (pinos da Nexys A7)
 | `instruction_memory` | Memória de instruções (ROM) com leitura combinacional e inicialização por `$readmemh`; endereço é de byte e os bits baixos selecionam palavra alinhada. |
 | `decoder` | Extrai campos `rd`, `rs1`, `rs2`, instancia o banco de registradores, o gerador de imediatos e a unidade de controle. |
 | `control_unit` | Decodifica opcode/funct3/funct7 e gera controles da ALU, branches, memória, PC e write-back. |
-| `register_file` | 32 registradores arquiteturais; `x0` é constante zero, duas leituras combinacionais e uma escrita síncrona. Não tem reset. |
+| `register_file` | 32 registradores arquiteturais; `x0` nasce zero e nunca é escrito, duas leituras combinacionais (direto do array) e uma escrita síncrona. Não tem reset. |
 | `imm_gen` | Monta e estende imediatos nos formatos I, S, B, U e J. |
-| `execution` | Seleciona operandos da ALU, calcula resultado e destino de branch ou salto; decide os branches com um comparador dedicado (`rs1` × `rs2`). |
+| `execution` | Seleciona operandos da ALU, calcula resultado e destino de branch ou salto; decide os branches com um comparador dedicado (`rs1` × `rs2`), escolhido pelo `funct3`. |
 | `alu` | Soma/subtração, lógica, comparação (SLT/SLTU), deslocamentos e passagem do operando B. |
 | `data_memory` | RAM byte-addressable, loads/stores de byte/halfword/word, extensão de sinal e MMIO. |
 | `write_back` | Seleciona resultado da ALU ou dado da memória para gravar no banco de registradores. |
@@ -93,7 +93,7 @@ Há testbenches separados para os principais blocos (`tb_alu`, `tb_control_unit`
 
 ## Pontos de atenção para manutenção
 
-1. **Condição de branch vem de um comparador dedicado:** a `execution` compara `rs1` com `rs2` direto (igualdade, menor com sinal ou menor sem sinal), sem os muxes de operando nem a ALU. O `alu_op_t` que o `control_unit` gera para o branch (`OP_CMP`, `OP_SLT`, `OP_SLTU`) só escolhe a comparação; `OP_BCT` desvia com a comparação verdadeira e `OP_BCF` com ela falsa. A ALU não calcula `OP_CMP` (devolve 0).
+1. **Condição de branch vem de um comparador dedicado:** a `execution` compara `rs1` com `rs2` direto (igualdade, menor com sinal ou menor sem sinal), sem os muxes de operando nem a ALU. A comparação é escolhida pelo `funct3` da instrução; `OP_BCT` desvia com a comparação verdadeira e `OP_BCF` com ela falsa. O `alu_op_t` que o `control_unit` gera para o branch (`OP_CMP`, `OP_SLT`, `OP_SLTU`) não é usado pelo datapath, e a ALU não calcula `OP_CMP` (devolve 0).
 2. **Alinhamento de destino:** `execution` zera somente o bit 0 do endereço de branch/jump. Imediatos B/J já incluem bit 0 zero; a implementação não zera explicitamente os bits `[1:0]`.
 3. **Reset:** `CPU_RESETN` é ativo baixo na placa e invertido em `top_core`; o reset que entra no `core` (`reset_i`) e é encaminhado a `search` é síncrono ativo alto e força o próximo PC a 0: o PC zera e a instrução registrada passa a ser a palavra 0. Banco de registradores e RAM não são limpos pelo reset (o banco começa em zero por `initial`). Na carga do FPGA, o PC nasce 0 e a instrução registrada nasce com a palavra 0, então a placa roda sem apertar o reset.
 4. **Instruções inválidas/não suportadas:** a unidade de controle não sinaliza exceção/trap. A decodificação é estrita: opcodes desconhecidos e codificações inválidas (ex.: `funct7` da extensão M, `JALR` com `funct3 ≠ 000`) não escrevem nada e o fluxo sequencial continua.

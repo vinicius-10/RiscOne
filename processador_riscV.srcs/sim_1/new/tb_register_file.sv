@@ -224,6 +224,28 @@ module tb_register_file;
         @(posedge clk);
         check_result(9, "Leitura combinada de x5 em RS1 e x31 em RS2", -32'd50, 32'hA5A5_5A5A);
 
+        // ---------------------------------------------------------------------
+        // SEÇÃO 5: x0 DEPOIS DE ESCRITAS (x0 ocupa uma posição do array)
+        // ---------------------------------------------------------------------
+
+        @(negedge clk); // TESTE 10: Escrita habilitada em x0 com dado diferente de 0
+        written_enable_i = 1'b1;          // Habilitação de escrita: ATIVADA
+        written_data_i   = 32'hFFFF_FFFF; // Todos os bits em 1 (deve ser ignorado em x0)
+        written_add_i    = 5'd0;          // Endereço de destino: Registrador x0
+        rs1_add_i        = 5'd0;          // Leitura RS1: Registrador x0
+        rs2_add_i        = 5'd31;         // Leitura RS2: Registrador x31
+        @(posedge clk);
+        check_result(10, "Escrita habilitada em x0 (0xFFFFFFFF) ignorada", 32'h0000_0000, 32'hA5A5_5A5A);
+
+        @(negedge clk); // TESTE 11: Leitura de x0 nas duas portas depois da escrita
+        written_enable_i = 1'b0;          // Habilitação de escrita: DESATIVADA
+        written_data_i   = 32'h0000_0000; // Dado zerado (ignorado)
+        written_add_i    = 5'd0;          // Endereço zerado
+        rs1_add_i        = 5'd0;          // Leitura RS1: Registrador x0
+        rs2_add_i        = 5'd0;          // Leitura RS2: Registrador x0
+        @(posedge clk);
+        check_result(11, "x0 continua 0 nas duas portas", 32'h0000_0000, 32'h0000_0000);
+
         // =========================================================================
         // 6. RELATÓRIO FINAL
         // =========================================================================

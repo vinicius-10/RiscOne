@@ -18,7 +18,8 @@
     Le as fontes de sources_1/new e o XDC de constrs_1 diretamente (non-project mode).
     Saida em build/synth/<Tag>/ (ignorado pelo git):
       resumo.txt, timing.rpt (timing summary com 10 piores caminhos), paths.rpt (20 caminhos em
-      tabela), util.rpt, util_hier.rpt (area por modulo), vivado.log
+      tabela), util.rpt, util_hier.rpt (area por modulo), vivado.log,
+      familias.txt / familias_det.txt (pior folga por familia de caminho, de scripts/familias.tcl)
     Cada execucao acrescenta uma linha em build/synth/historico.csv.
     Codigo de saida: 0 se o timing fecha (WNS >= 0), 1 se viola, 2 se o Vivado falhou.
 #>
@@ -63,6 +64,7 @@ $Mods = 'alu', 'control_unit', 'imm_gen', 'register_file', 'decoder', 'execution
         'instruction_memory', 'search', 'data_memory', 'write_back', 'core', 'top_core'
 $Srcs = @($Pkgs + $Mods | ForEach-Object { (Join-Path $Rtl "$_.sv") -replace '\\', '/' })
 
+$FamTcl = (Join-Path $PSScriptRoot 'familias.tcl') -replace '\\', '/'
 $Out = Join-Path $Base $Tag
 $sw = [Diagnostics.Stopwatch]::StartNew()
 if ($ParseOnly) {
@@ -112,6 +114,8 @@ report_timing -max_paths 20 -nworst 1 -path_type summary -file paths.rpt
 report_utilization -file util.rpt
 report_utilization -hierarchical -hierarchical_depth 4 -file util_hier.rpt
 report_methodology -file methodology.rpt
+report_power -file power.rpt
+source {$FamTcl}
 "@
 Set-Content -Path (Join-Path $Out 'run.tcl') -Value $tcl -Encoding ascii
 
@@ -182,6 +186,15 @@ $dsp  = UtilVal 'DSPs'
 $f7   = UtilVal 'F7 Muxes'
 $f8   = UtilVal 'F8 Muxes'
 
+# Consumo (report_power vetorless: taxas de chaveamento padrao do Vivado, sem
+# simulacao; serve para comparar versoes, nao como valor absoluto).
+$pwrFile = Join-Path $Out 'power.rpt'
+$pwr = if (Test-Path $pwrFile) { Get-Content $pwrFile } else { @() }
+function PwrVal([string]$name) {
+    foreach ($l in $pwr) { if ($l -match "^\|\s*$([regex]::Escape($name))\s*\|\s*([\d.]+)") { return $Matches[1] } }
+    return '-'
+}
+
 # Latches inferidos e avisos criticos (no log da sintese).
 $latches  = @($log | Where-Object { $_ -match 'Synth 8-327|inferring latch' })
 $critWarn = @($log | Where-Object { $_ -match '^CRITICAL WARNING' })
@@ -204,6 +217,7 @@ $appUsed = if (Test-Path (Join-Path $Out 'app.txt')) { (Get-Content (Join-Path $
 $r.Add("Tag: $Tag  |  programa: $appUsed  |  $etapaRpt  |  $([math]::Round($sw.Elapsed.TotalMinutes,1)) min")
 $r.Add(('Timing: periodo {0} ns | WNS {1} ns | TNS {2} ns | endpoints violando {3} | WHS {4} ns | Fmax estimada {5} MHz' -f $period, $wns, $tns, $failEp, $whs, $fmax))
 $r.Add("Area: LUTs $luts (LUTRAM $lutram) | FFs $ffs | BRAM $bram | DSP $dsp | F7 $f7 | F8 $f8")
+$r.Add("Consumo (estimativa vetorless): total $(PwrVal 'Total On-Chip Power (W)') W | dinamico $(PwrVal 'Dynamic (W)') W | estatico $(PwrVal 'Device Static (W)') W (ver power.rpt)")
 $r.Add("Latches inferidos: $($latches.Count) | CRITICAL WARNINGs: $($critWarn.Count)")
 if (Test-Path $methFile) {
     $r.Add("Methodology: $($meth.Count) regras violadas (ver methodology.rpt)")
@@ -220,8 +234,14 @@ foreach ($pp in $paths | Select-Object -First 5) {
 }
 foreach ($l in $latches | Select-Object -First 5) { $r.Add("LATCH: $l") }
 foreach ($l in $critWarn | Select-Object -First 5) { $r.Add("$l") }
+$famFile = Join-Path $Out 'familias.txt'
+if (Test-Path $famFile) {
+    $r.Add('')
+    $r.Add('Pior folga por familia (ns; detalhe em familias_det.txt):')
+    foreach ($l in Get-Content $famFile) { $r.Add("   $l") }
+}
 $r.Add('')
-$r.Add('Area por modulo: util_hier.rpt | caminhos: timing.rpt, paths.rpt | log: vivado.log')
+$r.Add('Area por modulo: util_hier.rpt | caminhos: timing.rpt, paths.rpt, familias_det.txt | log: vivado.log')
 
 [IO.File]::WriteAllLines((Join-Path $Out 'resumo.txt'), $r, (New-Object System.Text.UTF8Encoding $false))
 $r | ForEach-Object { Write-Host $_ }

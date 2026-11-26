@@ -26,8 +26,9 @@
  * calculo/decisao de desvio. A task de verificacao compara o resultado da ALU,
  * o endereco de destino e o indicador de desvio tomado, acumulando falhas em
  * `fail_count`. A decisão dos desvios condicionais vem do comparador dedicado
- * (`rs1` × `rs2`), independente dos muxes e da operação da ALU; `OP_CMP` só
- * escolhe a igualdade no comparador (a ALU devolve 0 para ele).
+ * (`rs1` × `rs2`), independente dos muxes e da operação da ALU: a comparação é
+ * escolhida pelo `funct3_i` (igualdade, menor com sinal ou menor sem sinal), e o
+ * `alu_control_i` não influi (a ALU devolve 0 para `OP_CMP`).
  *
  * @param clk Clock de referencia usado para organizar os estimulos.
  * @param pc_next_i Endereco sequencial aplicado ao DUT.
@@ -40,6 +41,7 @@
  * @param branch_enable_i Habilitacao de desvio aplicada ao DUT.
  * @param control_alu_a Seletor da entrada A da ALU.
  * @param control_alu_b Seletor da entrada B da ALU.
+ * @param funct3_i funct3 da instrucao; nos desvios escolhe a comparacao.
  * @retval pc_branch_o Endereco de desvio observado.
  * @retval alu_result_o Resultado da ALU observado.
  * @retval branch_taken_o Indicador de desvio tomado observado.
@@ -73,6 +75,7 @@ module tb_execution;
     logic              branch_enable_i;
     logic              control_alu_a;
     logic [1:0]        control_alu_b;
+    logic [2:0]        funct3_i;
 
     // Saídas do DUT
     logic [XLEN-1:0]   pc_branch_o;
@@ -101,6 +104,7 @@ module tb_execution;
         .branch_enable_i (branch_enable_i),
         .control_alu_a   (control_alu_a),
         .control_alu_b   (control_alu_b),
+        .funct3_i        (funct3_i),
         .pc_branch_o     (pc_branch_o),
         .alu_result_o    (alu_result_o),
         .branch_taken_o  (branch_taken_o),
@@ -196,11 +200,29 @@ module tb_execution;
         end
     endtask
 
+    // Referência dos desvios condicionais pela definição do RV32I: funct3[2:1]
+    // escolhe a comparação e funct3[0] inverte (BNE, BGE, BGEU).
+    function automatic logic ref_branch(
+        input logic [2:0]      f3,
+        input logic [XLEN-1:0] a,
+        input logic [XLEN-1:0] b
+    );
+        logic cond;
+        case (f3[2:1])
+            2'b00:   cond = (a == b);                    // BEQ / BNE
+            2'b10:   cond = ($signed(a) < $signed(b));   // BLT / BGE
+            2'b11:   cond = (a < b);                     // BLTU / BGEU
+            default: cond = 1'b0;                        // 01x: não é desvio
+        endcase
+        return cond ^ f3[0];
+    endfunction
+
     // =========================================================================
     // 5. SEQUÊNCIA DE TESTES
     // =========================================================================
     initial begin
         clk = 0;
+        funct3_i = 3'b000; // BEQ; os testes de desvio trocam conforme o caso
 
         $display("\n=========================================================================");
         $display("       INICIANDO BATERIA DE TESTES - MÓDULO DE EXECUÇÃO (EXECUTION)      ");
@@ -484,7 +506,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd50;        // rs2 = 50
-        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 == 50)
+        alu_control_i    = OP_CMP;        // ULA: igualdade (devolve 0)
+        funct3_i         = 3'b000;        // Comparador: BEQ (50 == 50)
         branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
@@ -497,7 +520,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd30;        // rs2 = 30
-        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 != 30)
+        alu_control_i    = OP_CMP;        // ULA: igualdade (devolve 0)
+        funct3_i         = 3'b000;        // Comparador: BEQ (50 != 30)
         branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
@@ -510,7 +534,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd30;        // rs2 = 30
-        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 != 30)
+        alu_control_i    = OP_CMP;        // ULA: igualdade (devolve 0)
+        funct3_i         = 3'b001;        // Comparador: BNE (50 != 30)
         branch_control_i = OP_BCF;        // Branch: BNE (toma se rs1 != rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
@@ -523,7 +548,8 @@ module tb_execution;
         imm_i            = 32'h0000_0040; // Imediato de desvio (0x40 -> Alvo 0x240)
         reg_data1_i      = 32'd50;        // rs1 = 50
         reg_data2_i      = 32'd50;        // rs2 = 50
-        alu_control_i    = OP_CMP;        // Comparador: igualdade (50 == 50)
+        alu_control_i    = OP_CMP;        // ULA: igualdade (devolve 0)
+        funct3_i         = 3'b001;        // Comparador: BNE (50 == 50)
         branch_control_i = OP_BCF;        // Branch: BNE (toma se rs1 != rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
@@ -579,7 +605,8 @@ module tb_execution;
         imm_i            = -32'd16;       // Offset de -16 bytes (32'hFFFF_FFF0)
         reg_data1_i      = 32'd10;        // rs1 = 10
         reg_data2_i      = 32'd10;        // rs2 = 10
-        alu_control_i    = OP_CMP;        // Comparador: igualdade (10 == 10)
+        alu_control_i    = OP_CMP;        // ULA: igualdade (devolve 0)
+        funct3_i         = 3'b000;        // Comparador: BEQ (10 == 10)
         branch_control_i = OP_BCT;        // Branch: BEQ (toma se rs1 == rs2)
         branch_enable_i  = 1'b1;          // Branch: HABILITADO
         control_alu_a    = 1'b0;          // MUX A: Seleciona rs1
@@ -770,8 +797,9 @@ module tb_execution;
         // ---------------------------------------------------------------------
         // SEÇÃO 7: COMPARADOR DE DESVIO (rs1 × rs2, sem a ALU)
         // A condição dos desvios compara rs1 com rs2 direto; os muxes A/B e a
-        // ALU não influem. alu_control escolhe a comparação: OP_SLT (com
-        // sinal), OP_SLTU (sem sinal) ou igualdade (OP_CMP).
+        // ALU não influem. funct3_i escolhe a comparação: [2] = 0 igualdade,
+        // 1 "menor"; [1] = 1 sem sinal. O alu_control_i só muda o resultado da
+        // ALU (OP_SLT/OP_SLTU abaixo conferem também a ALU).
         // ---------------------------------------------------------------------
 
         @(negedge clk); // TESTE 50: MUX B no imediato não afeta o BEQ
@@ -781,6 +809,7 @@ module tb_execution;
         reg_data1_i      = 32'd7;
         reg_data2_i      = 32'd7;
         alu_control_i    = OP_CMP;
+        funct3_i         = 3'b000;        // BEQ
         branch_control_i = OP_BCT;        // BEQ
         branch_enable_i  = 1'b1;
         control_alu_a    = 1'b0;          // MUX A: rs1
@@ -801,19 +830,23 @@ module tb_execution;
         control_alu_a    = 1'b0;
         control_alu_b    = 2'b00;
         alu_control_i    = OP_SLT;
+        funct3_i         = 3'b100;        // BLT
         branch_control_i = OP_BCT;        // BLT
         check_result(52, "Comparador: BLT 0x80000000 < 0x7FFFFFFF (tomado)", 32'd1, 32'h0000_0240, 1'b1);
 
         @(negedge clk); // TESTE 53
+        funct3_i         = 3'b101;        // BGE
         branch_control_i = OP_BCF;        // BGE
         check_result(53, "Comparador: BGE 0x80000000 >= 0x7FFFFFFF (nao)", 32'd1, 32'h0000_0240, 1'b0);
 
         @(negedge clk); // TESTE 54
         alu_control_i    = OP_SLTU;
+        funct3_i         = 3'b110;        // BLTU
         branch_control_i = OP_BCT;        // BLTU
         check_result(54, "Comparador: BLTU 0x80000000 < 0x7FFFFFFF (nao)", 32'd0, 32'h0000_0240, 1'b0);
 
         @(negedge clk); // TESTE 55
+        funct3_i         = 3'b111;        // BGEU
         branch_control_i = OP_BCF;        // BGEU
         check_result(55, "Comparador: BGEU 0x80000000 >= 0x7FFFFFFF (tomado)", 32'd0, 32'h0000_0240, 1'b1);
 
@@ -821,72 +854,112 @@ module tb_execution;
         reg_data1_i      = 32'hFFFF_FFFF;
         reg_data2_i      = 32'h0000_0000;
         alu_control_i    = OP_SLT;
+        funct3_i         = 3'b100;        // BLT
         branch_control_i = OP_BCT;        // BLT
         check_result(56, "Comparador: BLT -1 < 0 (tomado)", 32'd1, 32'h0000_0240, 1'b1);
 
         @(negedge clk); // TESTE 57
-        alu_control_i    = OP_SLTU;       // BLTU: 0xFFFFFFFF < 0 é falso
+        alu_control_i    = OP_SLTU;
+        funct3_i         = 3'b110;        // BLTU: 0xFFFFFFFF < 0 é falso
         check_result(57, "Comparador: BLTU 0xFFFFFFFF < 0 (nao)", 32'd0, 32'h0000_0240, 1'b0);
 
         @(negedge clk); // TESTE 58: iguais no BGE (não é menor -> tomado)
         reg_data1_i      = 32'h8000_0000;
         reg_data2_i      = 32'h8000_0000;
         alu_control_i    = OP_SLT;
+        funct3_i         = 3'b101;        // BGE
         branch_control_i = OP_BCF;        // BGE
         check_result(58, "Comparador: BGE iguais (tomado)", 32'd0, 32'h0000_0240, 1'b1);
 
-        // TESTE 59: vetores aleatórios contra um modelo do comparador. rs2 = rs1
-        // em 1/4 dos vetores e só o bit de sinal diferente em outro 1/4; muxes,
+        // TESTE 59: vetores aleatórios contra a referência do RV32I. Em 3/4 dos
+        // vetores rs2 = rs1, só o bit de sinal diferente ou um bit qualquer
+        // diferente. funct3 sorteado entre os 6 desvios; alu_control, muxes,
         // imediato e PC aleatórios (não podem influir na decisão).
         begin
-            alu_op_t         ops [3];
+            logic [2:0]      f3s [6];
             logic [XLEN-1:0] rs1, rs2;
-            logic            cond, ref_taken;
+            logic            ref_taken;
             int              erros;
 
-            ops   = '{OP_CMP, OP_SLT, OP_SLTU};
+            f3s   = '{3'b000, 3'b001, 3'b100, 3'b101, 3'b110, 3'b111};
             erros = 0;
-            for (int n = 0; n < 2000; n++) begin
+            for (int n = 0; n < 4000; n++) begin
                 rs1 = $urandom;
                 case (n % 4)
                     0:       rs2 = rs1;
                     1:       rs2 = rs1 ^ 32'h8000_0000;
+                    2:       rs2 = rs1 ^ (32'h1 << $urandom_range(XLEN-1));
                     default: rs2 = $urandom;
                 endcase
 
                 @(negedge clk);
                 reg_data1_i      = rs1;
                 reg_data2_i      = rs2;
-                alu_control_i    = ops[$urandom_range(2)];
-                branch_control_i = ($urandom_range(1) == 1) ? OP_BCF : OP_BCT;
+                funct3_i         = f3s[$urandom_range(5)];
+                branch_control_i = funct3_i[0] ? OP_BCF : OP_BCT;
+                alu_control_i    = alu_op_t'($urandom_range(11));
                 branch_enable_i  = 1'b1;
                 control_alu_a    = $urandom_range(1);
                 control_alu_b    = $urandom_range(2);
                 imm_i            = $urandom;
                 pc_i             = $urandom;
                 pc_next_i        = $urandom;
-
-                case (alu_control_i)
-                    OP_SLT:  cond = ($signed(rs1) < $signed(rs2));
-                    OP_SLTU: cond = (rs1 < rs2);
-                    default: cond = (rs1 == rs2);
-                endcase
-                ref_taken = (branch_control_i == OP_BCT) ? cond : ~cond;
+                ref_taken        = ref_branch(funct3_i, rs1, rs2);
 
                 #1;
                 if (branch_taken_o !== ref_taken) begin
                     if (erros < 5)
-                        $display("       rs1=0x%08h rs2=0x%08h %s %s A=%0b B=%0d -> taken %0b (esperado %0b)",
-                                 rs1, rs2, alu_control_i.name(), branch_control_i.name(),
+                        $display("       rs1=0x%08h rs2=0x%08h funct3=%03b %s A=%0b B=%0d -> taken %0b (esperado %0b)",
+                                 rs1, rs2, funct3_i, alu_control_i.name(),
                                  control_alu_a, control_alu_b, branch_taken_o, ref_taken);
                     erros++;
                 end
             end
 
             if (erros == 0) begin
-                $display("[PASS] Teste 59: %-50s | 2000 vetores", "Comparador: aleatorio contra o modelo");
+                $display("[PASS] Teste 59: %-50s | 4000 vetores", "Comparador: aleatorio contra a referencia");
             end else begin
-                $display("[FAIL] Teste 59: Comparador: aleatorio contra o modelo | %0d erros", erros);
+                $display("[FAIL] Teste 59: Comparador: aleatorio contra a referencia | %0d erros", erros);
+                fail_count++;
+            end
+        end
+
+        // TESTE 60: todos os pares de valores de borda nos 6 desvios, com o
+        // alu_control fixo em OP_CMP (o comparador só olha o funct3).
+        begin
+            logic [XLEN-1:0] bordas [12];
+            logic [2:0]      f3s [6];
+            int              erros, casos;
+
+            bordas = '{32'h0000_0000, 32'h0000_0001, 32'h0000_0002, 32'h7FFF_FFFF,
+                       32'h8000_0000, 32'h8000_0001, 32'hFFFF_FFFF, 32'hFFFF_FFFE,
+                       32'h5555_5555, 32'hAAAA_AAAA, 32'h0001_0000, 32'h0000_FFFF};
+            f3s    = '{3'b000, 3'b001, 3'b100, 3'b101, 3'b110, 3'b111};
+            erros  = 0;
+            casos  = 0;
+            foreach (bordas[i]) foreach (bordas[j]) foreach (f3s[k]) begin
+                @(negedge clk);
+                reg_data1_i      = bordas[i];
+                reg_data2_i      = bordas[j];
+                funct3_i         = f3s[k];
+                branch_control_i = f3s[k][0] ? OP_BCF : OP_BCT;
+                alu_control_i    = OP_CMP;
+                branch_enable_i  = 1'b1;
+                #1;
+                casos++;
+                if (branch_taken_o !== ref_branch(f3s[k], bordas[i], bordas[j])) begin
+                    if (erros < 5)
+                        $display("       rs1=0x%08h rs2=0x%08h funct3=%03b -> taken %0b (esperado %0b)",
+                                 bordas[i], bordas[j], f3s[k], branch_taken_o,
+                                 ref_branch(f3s[k], bordas[i], bordas[j]));
+                    erros++;
+                end
+            end
+
+            if (erros == 0) begin
+                $display("[PASS] Teste 60: %-50s | %0d casos", "Comparador: pares de bordas x 6 desvios", casos);
+            end else begin
+                $display("[FAIL] Teste 60: Comparador: pares de bordas x 6 desvios | %0d erros", erros);
                 fail_count++;
             end
         end
